@@ -1,16 +1,46 @@
 import svgwrite
 import math
+import csv
+from dataclasses import dataclass
+from typing import List
+
+@dataclass
+class Person:
+    ring: int
+    name: str
+    birthdate: str
+    birthplace: str
 
 # Parameters
 center = (500, 500)
 ring_thickness = 40
-num_rings = 4
+num_rings = 3
 ring_radii = [100 + i * ring_thickness for i in range(num_rings)]
-segments_per_ring = [2, 4, 8, 16]
-segment_angles = [100, 50, 25, 12.5]
+segments_per_ring = [4, 8, 16]
+segment_angles = [50, 25, 12.5]
 total_angle = 200
 start_angle_offset = 170
 line_spacing = 12  # spacing between text lines
+
+# Load people data from CSV file
+def load_people_from_csv(filename: str) -> List[List[Person]]:
+    people_by_ring = [[] for _ in range(num_rings)]
+    
+    with open(filename, 'r', newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            person = Person(
+                ring=int(row['ring']),
+                name=row['name'],
+                birthdate=row['birthdate'],
+                birthplace=row['birthplace']
+            )
+            people_by_ring[person.ring].append(person)
+    
+    return people_by_ring
+
+# Load the data
+ring_data = load_people_from_csv('people.csv')
 
 # Create SVG drawing
 dwg = svgwrite.Drawing('./radial_family.svg', size=('1000px', '1000px'))
@@ -23,8 +53,12 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
         start_angle = segment_angle
         end_angle = segment_angle + angle_span
 
-        for k in range(3):  # 3 lines per segment
-            radius = base_radius + k * line_spacing  # offset each line outward
+        # Get person data for this segment
+        person = ring_data[i][j]
+        lines = [person.name, person.birthdate, person.birthplace]
+
+        for k, line in enumerate(lines):  # 3 lines per segment
+            radius = base_radius + (3-k) * line_spacing  + i * 12 # ffset each line outward
             large_arc_flag = 1 if angle_span > 180 else 0
             start = (
                 center[0] + radius * math.cos(math.radians(start_angle)),
@@ -42,7 +76,7 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
 
             # Add text to each individual arc path
             text = dwg.text("", font_size="10px", text_anchor="middle")
-            text_path = dwg.textPath(f"#{path_id}", f"Line{k+1}", startOffset="50%")
+            text_path = dwg.textPath(f"#{path_id}", line, startOffset="50%")
             text.add(text_path)
             dwg.add(text)
 
