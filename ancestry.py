@@ -58,19 +58,48 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
         lines = [person.name, person.birthdate, person.birthplace]
 
         for k, line in enumerate(lines):  # 3 lines per segment
-            radius = base_radius + (3-k) * line_spacing  + i * 12 # ffset each line outward
+            radius = base_radius + (3-k) * line_spacing + i*16  # offset each line outward
             large_arc_flag = 1 if angle_span > 180 else 0
-            start = (
-                center[0] + radius * math.cos(math.radians(start_angle)),
-                center[1] + radius * math.sin(math.radians(start_angle))
-            )
-            end = (
-                center[0] + radius * math.cos(math.radians(end_angle)),
-                center[1] + radius * math.sin(math.radians(end_angle))
-            )
+            
+            # Calculate center point of the segment
+            center_angle = (start_angle + end_angle) / 2
+            
+            if i == 2:  # Only outermost ring - use straight lines (rays)
+                # Calculate angles for the 3 lines: -4 degree, center, +4 degree
+                line_angles = [
+                    center_angle - 3,  # First line: -4 degree
+                    center_angle,      # Second line: center angle
+                    center_angle + 3   # Third line: +4 degree
+                ]
+                
+                # Use the same radius for all 3 lines to center them on the same ray length
+                ray_radius = base_radius + line_spacing  # Center radius for all lines
+                ray_start_radius = ray_radius + 30  # Start slightly inward
+                ray_end_radius = ray_radius + 120  # End slightly outward
+                
+                line_angle = line_angles[k]  # Use the appropriate angle for this line
+                
+                start = (
+                    center[0] + ray_start_radius * math.cos(math.radians(line_angle)),
+                    center[1] + ray_start_radius * math.sin(math.radians(line_angle))
+                )
+                end = (
+                    center[0] + ray_end_radius * math.cos(math.radians(line_angle)),
+                    center[1] + ray_end_radius * math.sin(math.radians(line_angle))
+                )
+                path_d = f"M {start[0]},{start[1]} L {end[0]},{end[1]}"
+            else:  # Inner rings - use curved arcs
+                start = (
+                    center[0] + radius * math.cos(math.radians(start_angle)),
+                    center[1] + radius * math.sin(math.radians(start_angle))
+                )
+                end = (
+                    center[0] + radius * math.cos(math.radians(end_angle)),
+                    center[1] + radius * math.sin(math.radians(end_angle))
+                )
+                path_d = f"M {start[0]},{start[1]} A {radius},{radius} 0 {large_arc_flag},1 {end[0]},{end[1]}"
 
-            path_id = f"path_r{i}_s{j}_l{k}"
-            path_d = f"M {start[0]},{start[1]} A {radius},{radius} 0 {large_arc_flag},1 {end[0]},{end[1]}"
+            path_id = f"path_r{i}_s{j}_l{3-k}"
             path = dwg.path(d=path_d, fill="none", stroke="lightgray", id=path_id)
             dwg.add(path)
 
