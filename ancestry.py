@@ -2,7 +2,7 @@ import svgwrite
 import math
 import csv
 from dataclasses import dataclass
-from typing import List
+from typing import List, Tuple
 
 @dataclass
 class Person:
@@ -13,14 +13,32 @@ class Person:
 
 # Parameters
 center = (500, 500)
-ring_thickness = 40
+ring_thickness = 80
 num_rings = 3
 ring_radii = [100 + i * ring_thickness for i in range(num_rings)]
 segments_per_ring = [4, 8, 16]
 segment_angles = [50, 25, 12.5]
 total_angle = 200
 start_angle_offset = 170
-line_spacing = 12  # spacing between text lines
+line_spacing = 16  # spacing between text lines
+
+def polar_to_cartesian(radius: float, angle_degrees: float, center_point: Tuple[int, int] = center) -> Tuple[float, float]:
+    """Convert polar coordinates (radius, angle) to cartesian coordinates relative to center."""
+    x = center_point[0] + radius * math.cos(math.radians(angle_degrees))
+    y = center_point[1] + radius * math.sin(math.radians(angle_degrees))
+    return (x, y)
+
+def create_arc_path(start_radius: float, end_radius: float, start_angle: float, end_angle: float, large_arc_flag: int = 0) -> str:
+    """Create an SVG arc path string."""
+    start_point = polar_to_cartesian(start_radius, start_angle)
+    end_point = polar_to_cartesian(end_radius, end_angle)
+    return f"M {start_point[0]},{start_point[1]} A {start_radius},{start_radius} 0 {large_arc_flag},1 {end_point[0]},{end_point[1]}"
+
+def create_line_path(start_radius: float, end_radius: float, angle: float) -> str:
+    """Create an SVG line path string."""
+    start_point = polar_to_cartesian(start_radius, angle)
+    end_point = polar_to_cartesian(end_radius, angle)
+    return f"M {start_point[0]},{start_point[1]} L {end_point[0]},{end_point[1]}"
 
 # Load people data from CSV file
 def load_people_from_csv(filename: str) -> List[List[Person]]:
@@ -65,42 +83,25 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
             center_angle = (start_angle + end_angle) / 2
             
             if i == 2:  # Only outermost ring - use straight lines (rays)
-                # Calculate angles for the 3 lines: -4 degree, center, +4 degree
+                # Calculate angles for the 3 lines: -3 degree, center, +3 degree
                 line_angles = [
-                    center_angle - 3,  # First line: -4 degree
+                    center_angle - 3,  # First line: -3 degree
                     center_angle,      # Second line: center angle
-                    center_angle + 3   # Third line: +4 degree
+                    center_angle + 3   # Third line: +3 degree
                 ]
                 
                 # Use the same radius for all 3 lines to center them on the same ray length
                 ray_radius = base_radius + line_spacing  # Center radius for all lines
-                ray_start_radius = ray_radius + 30  # Start slightly inward
-                ray_end_radius = ray_radius + 120  # End slightly outward
+                ray_start_radius = ray_radius + 20  # Start slightly inward
+                ray_end_radius = ray_radius + 100  # End slightly outward
                 
                 line_angle = line_angles[k]  # Use the appropriate angle for this line
-                
-                start = (
-                    center[0] + ray_start_radius * math.cos(math.radians(line_angle)),
-                    center[1] + ray_start_radius * math.sin(math.radians(line_angle))
-                )
-                end = (
-                    center[0] + ray_end_radius * math.cos(math.radians(line_angle)),
-                    center[1] + ray_end_radius * math.sin(math.radians(line_angle))
-                )
-                path_d = f"M {start[0]},{start[1]} L {end[0]},{end[1]}"
+                path_d = create_line_path(ray_start_radius, ray_end_radius, line_angle)
             else:  # Inner rings - use curved arcs
-                start = (
-                    center[0] + radius * math.cos(math.radians(start_angle)),
-                    center[1] + radius * math.sin(math.radians(start_angle))
-                )
-                end = (
-                    center[0] + radius * math.cos(math.radians(end_angle)),
-                    center[1] + radius * math.sin(math.radians(end_angle))
-                )
-                path_d = f"M {start[0]},{start[1]} A {radius},{radius} 0 {large_arc_flag},1 {end[0]},{end[1]}"
+                path_d = create_arc_path(radius, radius, start_angle, end_angle, large_arc_flag)
 
             path_id = f"path_r{i}_s{j}_l{3-k}"
-            path = dwg.path(d=path_d, fill="none", stroke="lightgray", id=path_id)
+            path = dwg.path(d=path_d, fill="none", stroke="white", id=path_id)
             dwg.add(path)
 
             # Add text to each individual arc path
