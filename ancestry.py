@@ -40,6 +40,25 @@ def create_line_path(start_radius: float, end_radius: float, angle: float) -> st
     end_point = polar_to_cartesian(end_radius, angle)
     return f"M {start_point[0]},{start_point[1]} L {end_point[0]},{end_point[1]}"
 
+def create_segment_outline_path(inner_radius: float, outer_radius: float, start_angle: float, end_angle: float) -> str:
+    """Create an SVG path that outlines a segment with rays and arcs."""
+    # Calculate the four corners of the segment
+    inner_start = polar_to_cartesian(inner_radius, start_angle)
+    inner_end = polar_to_cartesian(inner_radius, end_angle)
+    outer_start = polar_to_cartesian(outer_radius, start_angle)
+    outer_end = polar_to_cartesian(outer_radius, end_angle)
+    
+    # Create path: inner_start -> outer_start -> outer_arc -> outer_end -> inner_end -> inner_arc -> inner_start
+    large_arc_flag = 1 if (end_angle - start_angle) > 180 else 0
+    
+    path = f"M {inner_start[0]},{inner_start[1]} "  # Start at inner start
+    path += f"L {outer_start[0]},{outer_start[1]} "  # Line to outer start
+    path += f"A {outer_radius},{outer_radius} 0 {large_arc_flag},1 {outer_end[0]},{outer_end[1]} "  # Outer arc
+    path += f"L {inner_end[0]},{inner_end[1]} "  # Line to inner end
+    path += f"A {inner_radius},{inner_radius} 0 {large_arc_flag},0 {inner_start[0]},{inner_start[1]} Z"  # Inner arc back to start
+    
+    return path
+
 # Load people data from CSV file
 def load_people_from_csv(filename: str) -> List[List[Person]]:
     people_by_ring = [[] for _ in range(num_rings)]
@@ -74,6 +93,16 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
         # Get person data for this segment
         person = ring_data[i][j]
         lines = [person.name, person.birthdate, person.birthplace]
+
+        # Draw shaded box for innermost ring segments
+        if i <= 1:  # Only for innermost ring
+            inner_radius = base_radius + 6 + i*16 # Slightly inside the base radius
+            outer_radius = base_radius + 3 * line_spacing + 18 + i*16  # Slightly outside the text area
+            outline_path = create_segment_outline_path(inner_radius, outer_radius, start_angle + 1, end_angle - 1)
+            
+            # Add the shaded box
+            box = dwg.path(d=outline_path, fill="#f0f0f0", stroke="lightgray", stroke_width=1)
+            dwg.add(box)
 
         for k, line in enumerate(lines):  # 3 lines per segment
             radius = base_radius + (3-k) * line_spacing + i*16  # offset each line outward
