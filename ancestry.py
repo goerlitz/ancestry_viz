@@ -15,12 +15,16 @@ class Person:
 
 # Parameters
 center = (500, 500)
-ring_thickness = 80
-num_rings = 4  # Now 4 rings
-ring_radii = [20 + i * ring_thickness for i in range(num_rings)]
-segments_per_ring = [2, 4, 8, 16]  # New innermost ring with 2 segments
-segment_angles = [100, 50, 25, 12.5]  # 200/2, 200/4, 200/8, 200/16
-total_angle = 200
+num_rings = 4
+segments_per_ring = [2, 4, 8, 16]
+total_angle = 200.0
+segment_angles = [
+    total_angle / i for i in segments_per_ring
+]  # 200/2, 200/4, 200/8, 200/16
+start_radius = 32
+ring_thickness = 56
+ring_gap = 40
+ring_radii = [start_radius + i * (ring_thickness + ring_gap) for i in range(num_rings)]
 start_angle_offset = 170
 line_spacing = 16  # spacing between text lines
 
@@ -120,29 +124,23 @@ dwg = svgwrite.Drawing("./radial_family.svg", size=("1000px", "1000px"))
 dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
 
 # Draw visible arcs and attach each text line to its own path
-for i, (base_radius, segments, angle_span) in enumerate(
+for ring_no, (base_radius, segments, angle_span) in enumerate(
     zip(ring_radii, segments_per_ring, segment_angles)
 ):
-    for j in range(segments):
-        segment_angle = j * angle_span + start_angle_offset
+    for seg_no in range(segments):
+        segment_angle = seg_no * angle_span + start_angle_offset
         start_angle = segment_angle
         end_angle = segment_angle + angle_span
 
         # Get person data for this segment
-        person = ring_data[i][j]
+        person = ring_data[ring_no][seg_no]
         lines = [person.name, person.birthdate, person.birthplace]
 
         # Draw shaded box for innermost and outermost ring segments
 
-        inner_radius = base_radius + 6 + i * 16  # Slightly inside the base radius
-        if i == 3:
-            # For outer ring, extend the box much further out to cover the text rays
-            ray_radius = base_radius + line_spacing
-            outer_radius = ray_radius + 120  # Match ray_end_radius for text
-        else:
-            outer_radius = (
-                base_radius + 3 * line_spacing + 18 + i * 16
-            )  # Slightly outside the text area
+        inner_radius = base_radius
+        outer_radius = base_radius + (120 if ring_no == 3 else ring_thickness)
+
         outline_path = create_segment_outline_path_with_gaps(
             inner_radius, outer_radius, start_angle, end_angle, gap_size=4
         )
@@ -157,7 +155,7 @@ for i, (base_radius, segments, angle_span) in enumerate(
             # Calculate center point of the segment
             center_angle = (start_angle + end_angle) / 2
 
-            if i == 3:  # Only outermost ring - use straight lines (rays)
+            if ring_no == 3:  # Only outermost ring - use straight lines (rays)
 
                 # Flip text for left half (upright)
                 flip = 90 < (center_angle % 360) < 270
@@ -168,27 +166,19 @@ for i, (base_radius, segments, angle_span) in enumerate(
                     center_angle,  # Second line: center angle
                     center_angle + 2.6,  # Third line: +3 degree
                 ]
-                ray_radius = base_radius + line_spacing  # Center radius for all lines
-                ray_start_radius = ray_radius + 20  # Start slightly inward
-                ray_end_radius = ray_radius + 120  # End slightly outward
-                line_angle = line_angles[
-                    2 - k if flip else k
-                ]  # Use the appropriate angle for this line
+                # Center radius for all lines
+                start_radius = base_radius + 8  # Start slightly inward
+                end_radius = base_radius + 112  # End slightly outward
+                line_angle = line_angles[2 - k if flip else k]
 
+                # reverse the line path so text is upright
                 if flip:
-                    # Do NOT add 180 to the angle, just reverse the line path so text is upright
-                    path_d = create_line_path(
-                        ray_end_radius, ray_start_radius, line_angle
-                    )
+                    path_d = create_line_path(end_radius, start_radius, line_angle)
                 else:
-                    path_d = create_line_path(
-                        ray_start_radius, ray_end_radius, line_angle
-                    )
+                    path_d = create_line_path(start_radius, end_radius, line_angle)
 
             else:  # Inner rings - use curved arcs
-                radius = (
-                    base_radius + (3 - k) * line_spacing + i * 16
-                )  # offset each line outward
+                radius = base_radius + (2.5 - k) * line_spacing  # offset each line
                 large_arc_flag = 1 if angle_span > 180 else 0
                 path_d = create_arc_path(
                     radius, radius, start_angle, end_angle, large_arc_flag
@@ -197,12 +187,12 @@ for i, (base_radius, segments, angle_span) in enumerate(
             text_anchor = "middle"
             start_offset = "50%"
 
-            path_id = f"path_r{i}_s{j}_l{3-k}"
+            path_id = f"path_r{ring_no}_s{seg_no}_l{3-k}"
             path = dwg.path(d=path_d, fill="none", stroke="white", id=path_id)
             dwg.add(path)
 
             # Add text to each individual arc path
-            text = dwg.text("", font_size="10px", text_anchor=text_anchor)
+            text = dwg.text("", font_size="11px", text_anchor=text_anchor)
             text_path = dwg.textPath(f"#{path_id}", line, startOffset=start_offset)
             text.add(text_path)
             dwg.add(text)
