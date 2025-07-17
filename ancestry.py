@@ -18,9 +18,7 @@ center = (500, 500)
 num_rings = 4
 segments_per_ring = [2, 4, 8, 16]
 total_angle = 200.0
-segment_angles = [
-    total_angle / i for i in segments_per_ring
-]  # 200/2, 200/4, 200/8, 200/16
+segment_angles = [total_angle / i for i in segments_per_ring]  # 200/2, 200/4, ...
 start_radius = 40
 ring_thickness = 64
 ring_gap = 40
@@ -140,7 +138,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         # Draw shaded box for innermost and outermost ring segments
 
         inner_radius = base_radius
-        outer_radius = base_radius + (110 if ring_no == 3 else ring_thickness)
+        outer_radius = base_radius + (120 if ring_no == 3 else ring_thickness)
 
         outline_path = create_segment_outline_path_with_gaps(
             inner_radius, outer_radius, start_angle, end_angle, gap_size=4
@@ -169,7 +167,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                 ]
                 # Center radius for all lines
                 start_radius = base_radius + 8  # Start slightly inward
-                end_radius = base_radius + 102  # End slightly outward
+                end_radius = base_radius + 112  # End slightly outward
                 line_angle = line_angles[2 - k if flip else k]
 
                 # reverse the line path so text is upright
@@ -198,5 +196,35 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             text.add(text_path)
             dwg.add(text)
 
+def draw_parent_child_arcs(child_ring_idx: int, parent_ring_idx: int, dwg):
+    parent_count = segments_per_ring[parent_ring_idx]
+    child_count = segments_per_ring[child_ring_idx]
+    parent_angle_span = segment_angles[parent_ring_idx]
+    child_angle_span = segment_angles[child_ring_idx]
+    arc_radius = ring_radii[parent_ring_idx] - ring_gap / 3 * 2
+    num_parents = parent_count
+    num_children = child_count
+
+    for i in range(num_children):
+        child_center_angle = i * child_angle_span + start_angle_offset + child_angle_span / 2
+        start = polar_to_cartesian(ring_radii[parent_ring_idx], child_center_angle - parent_angle_span / 2)
+        end = polar_to_cartesian(ring_radii[parent_ring_idx], child_center_angle + parent_angle_span / 2)
+        arc_start = polar_to_cartesian(arc_radius, child_center_angle - parent_angle_span / 2)
+        arc_end = polar_to_cartesian(arc_radius, child_center_angle + parent_angle_span / 2)
+        arc_center = polar_to_cartesian(arc_radius, child_center_angle)
+        child_center = polar_to_cartesian(ring_radii[child_ring_idx] + ring_thickness, child_center_angle)
+
+        path_d = f"M {start[0]},{start[1]}"
+        path_d += f"L {arc_start[0]},{arc_start[1]}"
+        path_d += f"A {arc_radius},{arc_radius} 0 0,1 {arc_end[0]},{arc_end[1]}"
+        path_d += f"L {end[0]},{end[1]}"
+        path_d += f"M {arc_center[0]},{arc_center[1]}"
+        path_d += f"L {child_center[0]},{child_center[1]}"
+        arc_path = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
+        dwg.add(arc_path)
+
+draw_parent_child_arcs(0, 1, dwg)
+draw_parent_child_arcs(1, 2, dwg)
+draw_parent_child_arcs(2, 3, dwg)
 # Save SVG
 dwg.save()
