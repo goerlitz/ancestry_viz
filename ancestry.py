@@ -21,8 +21,8 @@ total_angle = 200.0
 segment_angles = [
     total_angle / i for i in segments_per_ring
 ]  # 200/2, 200/4, 200/8, 200/16
-start_radius = 32
-ring_thickness = 56
+start_radius = 40
+ring_thickness = 64
 ring_gap = 40
 ring_radii = [start_radius + i * (ring_thickness + ring_gap) for i in range(num_rings)]
 start_angle_offset = 170
@@ -39,16 +39,17 @@ def polar_to_cartesian(
 
 
 def create_arc_path(
-    start_radius: float,
-    end_radius: float,
+    radius: float,
     start_angle: float,
     end_angle: float,
     large_arc_flag: int = 0,
+    gap_size: float = 5,
 ) -> str:
     """Create an SVG arc path string."""
-    start_point = polar_to_cartesian(start_radius, start_angle)
-    end_point = polar_to_cartesian(end_radius, end_angle)
-    return f"M {start_point[0]},{start_point[1]} A {start_radius},{start_radius} 0 {large_arc_flag},1 {end_point[0]},{end_point[1]}"
+    gap_angle = calculate_gap_angle(gap_size, radius)
+    start_point = polar_to_cartesian(radius, start_angle + gap_angle)
+    end_point = polar_to_cartesian(radius, end_angle - gap_angle)
+    return f"M {start_point[0]},{start_point[1]} A {radius},{radius} 0 {large_arc_flag},1 {end_point[0]},{end_point[1]}"
 
 
 def create_line_path(start_radius: float, end_radius: float, angle: float) -> str:
@@ -139,7 +140,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         # Draw shaded box for innermost and outermost ring segments
 
         inner_radius = base_radius
-        outer_radius = base_radius + (120 if ring_no == 3 else ring_thickness)
+        outer_radius = base_radius + (110 if ring_no == 3 else ring_thickness)
 
         outline_path = create_segment_outline_path_with_gaps(
             inner_radius, outer_radius, start_angle, end_angle, gap_size=4
@@ -168,7 +169,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                 ]
                 # Center radius for all lines
                 start_radius = base_radius + 8  # Start slightly inward
-                end_radius = base_radius + 112  # End slightly outward
+                end_radius = base_radius + 102  # End slightly outward
                 line_angle = line_angles[2 - k if flip else k]
 
                 # reverse the line path so text is upright
@@ -178,10 +179,10 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                     path_d = create_line_path(start_radius, end_radius, line_angle)
 
             else:  # Inner rings - use curved arcs
-                radius = base_radius + (2.5 - k) * line_spacing  # offset each line
+                radius = base_radius + (2.8  - k) * line_spacing  # offset each line
                 large_arc_flag = 1 if angle_span > 180 else 0
                 path_d = create_arc_path(
-                    radius, radius, start_angle, end_angle, large_arc_flag
+                    radius, start_angle, end_angle, large_arc_flag, gap_size=12
                 )
 
             text_anchor = "middle"
