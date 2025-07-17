@@ -127,37 +127,46 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
             dwg.add(box)
 
         for k, line in enumerate(lines):  # 3 lines per segment
-            radius = base_radius + (3-k) * line_spacing + i*16  # offset each line outward
-            large_arc_flag = 1 if angle_span > 180 else 0
-            
             # Calculate center point of the segment
-            center_angle = (start_angle + end_angle) / 2
-            
+            center_angle = (start_angle + end_angle) / 2 
+           
             if i == 2:  # Only outermost ring - use straight lines (rays)
+
+                # Flip text for left half (upright)
+                flip = 90 < (center_angle % 360) < 270
+
                 # Calculate angles for the 3 lines: -3 degree, center, +3 degree
                 line_angles = [
                     center_angle - 3,  # First line: -3 degree
                     center_angle,      # Second line: center angle
                     center_angle + 3   # Third line: +3 degree
                 ]
-                
-                # Use the same radius for all 3 lines to center them on the same ray length
                 ray_radius = base_radius + line_spacing  # Center radius for all lines
                 ray_start_radius = ray_radius + 20  # Start slightly inward
                 ray_end_radius = ray_radius + 120  # End slightly outward
-                
-                line_angle = line_angles[k]  # Use the appropriate angle for this line
-                path_d = create_line_path(ray_start_radius, ray_end_radius, line_angle)
+                line_angle = line_angles[2-k if flip else k]  # Use the appropriate angle for this line
+
+                if flip:
+                    # Do NOT add 180 to the angle, just reverse the line path so text is upright
+                    path_d = create_line_path(ray_end_radius, ray_start_radius, line_angle)
+                else:
+                    path_d = create_line_path(ray_start_radius, ray_end_radius, line_angle)
+
             else:  # Inner rings - use curved arcs
+                radius = base_radius + (3-k) * line_spacing + i*16  # offset each line outward
+                large_arc_flag = 1 if angle_span > 180 else 0
                 path_d = create_arc_path(radius, radius, start_angle, end_angle, large_arc_flag)
+
+            text_anchor = "middle"
+            start_offset = "50%"
 
             path_id = f"path_r{i}_s{j}_l{3-k}"
             path = dwg.path(d=path_d, fill="none", stroke="white", id=path_id)
             dwg.add(path)
 
             # Add text to each individual arc path
-            text = dwg.text("", font_size="10px", text_anchor="middle")
-            text_path = dwg.textPath(f"#{path_id}", line, startOffset="50%")
+            text = dwg.text("", font_size="10px", text_anchor=text_anchor)
+            text_path = dwg.textPath(f"#{path_id}", line, startOffset=start_offset)
             text.add(text_path)
             dwg.add(text)
 
