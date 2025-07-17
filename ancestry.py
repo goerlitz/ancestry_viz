@@ -100,23 +100,28 @@ def create_segment_outline_path_with_gaps(
 # Load people data from CSV file
 def load_people_from_csv(filename: str) -> List[List[Person]]:
     people_by_ring = [[] for _ in range(num_rings)]
+    weddings_by_ring = [[] for _ in range(num_rings)]
 
     with open(filename, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
-            person = Person(
-                ring=int(row["ring"]),
-                name=row["name"],
-                birthdate=row["birthdate"],
-                birthplace=row["birthplace"],
-            )
-            people_by_ring[person.ring].append(person)
+            ring_no = int(row["ring"])
+            if ring_no >= 100:
+                weddings_by_ring[ring_no - 100].append(row["name"])
+            else:
+                person = Person(
+                    ring=ring_no,
+                    name=row["name"],
+                    birthdate=row["birthdate"],
+                    birthplace=row["birthplace"],
+                )
+                people_by_ring[person.ring].append(person)
 
-    return people_by_ring
+    return (people_by_ring, weddings_by_ring)
 
 
 # Load the data
-ring_data = load_people_from_csv("people.csv")
+(ring_data, wedd_data) = load_people_from_csv("people.csv")
 
 # Create SVG drawing
 dwg = svgwrite.Drawing("./radial_family.svg", size=("1000px", "1000px"))
@@ -138,7 +143,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         # Draw shaded box for innermost and outermost ring segments
 
         inner_radius = base_radius
-        outer_radius = base_radius + (120 if ring_no == 3 else ring_thickness)
+        outer_radius = base_radius + (130 if ring_no == 3 else ring_thickness)
 
         outline_path = create_segment_outline_path_with_gaps(
             inner_radius, outer_radius, start_angle, end_angle, gap_size=4
@@ -167,7 +172,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                 ]
                 # Center radius for all lines
                 start_radius = base_radius + 8  # Start slightly inward
-                end_radius = base_radius + 112  # End slightly outward
+                end_radius = base_radius + 122  # End slightly outward
                 line_angle = line_angles[2 - k if flip else k]
 
                 # reverse the line path so text is upright
@@ -177,7 +182,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                     path_d = create_line_path(start_radius, end_radius, line_angle)
 
             else:  # Inner rings - use curved arcs
-                radius = base_radius + (2.8  - k) * line_spacing  # offset each line
+                radius = base_radius + (2.8 - k) * line_spacing  # offset each line
                 large_arc_flag = 1 if angle_span > 180 else 0
                 path_d = create_arc_path(
                     radius, start_angle, end_angle, large_arc_flag, gap_size=12
@@ -191,28 +196,48 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             dwg.add(path)
 
             # Add text to each individual arc path
-            text = dwg.text("", font_size="11px", text_anchor=text_anchor)
+            text = dwg.text(
+                "",
+                font_size="11px",
+                text_anchor=text_anchor,
+                font_family="Georgia, 'Times New Roman', Times, serif",
+            )
             text_path = dwg.textPath(f"#{path_id}", line, startOffset=start_offset)
             text.add(text_path)
             dwg.add(text)
 
-def draw_parent_child_arcs(child_ring_idx: int, parent_ring_idx: int, dwg):
-    parent_count = segments_per_ring[parent_ring_idx]
-    child_count = segments_per_ring[child_ring_idx]
-    parent_angle_span = segment_angles[parent_ring_idx]
-    child_angle_span = segment_angles[child_ring_idx]
-    arc_radius = ring_radii[parent_ring_idx] - ring_gap / 3 * 2
+
+def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
+    parent_count = segments_per_ring[parent_idx]
+    child_count = segments_per_ring[child_idx]
+    parent_angle_span = segment_angles[parent_idx]
+    child_angle_span = segment_angles[child_idx]
+    arc_radius = ring_radii[parent_idx] - ring_gap / 3 * 2
     num_parents = parent_count
     num_children = child_count
 
     for i in range(num_children):
-        child_center_angle = i * child_angle_span + start_angle_offset + child_angle_span / 2
-        start = polar_to_cartesian(ring_radii[parent_ring_idx], child_center_angle - parent_angle_span / 2)
-        end = polar_to_cartesian(ring_radii[parent_ring_idx], child_center_angle + parent_angle_span / 2)
-        arc_start = polar_to_cartesian(arc_radius, child_center_angle - parent_angle_span / 2)
-        arc_end = polar_to_cartesian(arc_radius, child_center_angle + parent_angle_span / 2)
+        child_center_angle = (
+            i * child_angle_span + start_angle_offset + child_angle_span / 2
+        )
+        start = polar_to_cartesian(
+            ring_radii[parent_idx], child_center_angle - parent_angle_span / 2
+        )
+        end = polar_to_cartesian(
+            ring_radii[parent_idx], child_center_angle + parent_angle_span / 2
+        )
+        arc_start = polar_to_cartesian(
+            arc_radius, child_center_angle - parent_angle_span / 2
+        )
+        arc_end = polar_to_cartesian(
+            arc_radius, child_center_angle + parent_angle_span / 2
+        )
         arc_center = polar_to_cartesian(arc_radius, child_center_angle)
-        child_center = polar_to_cartesian(ring_radii[child_ring_idx] + ring_thickness, child_center_angle)
+        child_center = polar_to_cartesian(
+            ring_radii[child_idx] + ring_thickness, child_center_angle
+        )
+
+        wedding = wedd_data[child_idx+1][i]
 
         path_d = f"M {start[0]},{start[1]}"
         path_d += f"L {arc_start[0]},{arc_start[1]}"
@@ -220,8 +245,20 @@ def draw_parent_child_arcs(child_ring_idx: int, parent_ring_idx: int, dwg):
         path_d += f"L {end[0]},{end[1]}"
         path_d += f"M {arc_center[0]},{arc_center[1]}"
         path_d += f"L {child_center[0]},{child_center[1]}"
-        arc_path = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
+
+        path_id = f"path_w{child_idx}_s{i}"
+        arc_path = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1, id=path_id)
         dwg.add(arc_path)
+
+        text = dwg.text(
+            wedding,
+            font_size="11px",
+            text_anchor="middle",
+            font_family="Georgia, 'Times New Roman', Times, serif",
+        )
+        text_path = dwg.textPath(f"#{path_id}", wedding, startOffset="50%")
+        text.add(text_path)
+        dwg.add(text)
 
 draw_parent_child_arcs(0, 1, dwg)
 draw_parent_child_arcs(1, 2, dwg)
