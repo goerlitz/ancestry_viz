@@ -40,16 +40,33 @@ def create_line_path(start_radius: float, end_radius: float, angle: float) -> st
     end_point = polar_to_cartesian(end_radius, angle)
     return f"M {start_point[0]},{start_point[1]} L {end_point[0]},{end_point[1]}"
 
-def create_segment_outline_path(inner_radius: float, outer_radius: float, start_angle: float, end_angle: float) -> str:
-    """Create an SVG path that outlines a segment with rays and arcs."""
+def calculate_gap_angle(gap_size: float, radius: float) -> float:
+    """Calculate the angle offset needed to create a gap of specified size at a given radius."""
+    # Convert gap size (in pixels) to angle (in degrees)
+    # arc_length = radius * angle_in_radians
+    # gap_size = radius * angle_in_radians
+    # angle_in_radians = gap_size / radius
+    # angle_in_degrees = (gap_size / radius) * (180 / pi)
+    return (gap_size / radius) * (180 / math.pi)
+
+def create_segment_outline_path_with_gaps(inner_radius: float, outer_radius: float, start_angle: float, end_angle: float, gap_size: float = 5) -> str:
+    """Create an SVG path that outlines a segment with rays and arcs, with even gaps between segments."""
+    # Calculate angle offsets for even gaps at inner and outer radii
+    inner_gap_angle = calculate_gap_angle(gap_size, inner_radius)
+    outer_gap_angle = calculate_gap_angle(gap_size, outer_radius)
+    
+    # Adjust angles to create even gaps
+    start_angle_adjusted = start_angle + outer_gap_angle
+    end_angle_adjusted = end_angle - outer_gap_angle
+    
     # Calculate the four corners of the segment
-    inner_start = polar_to_cartesian(inner_radius, start_angle)
-    inner_end = polar_to_cartesian(inner_radius, end_angle)
-    outer_start = polar_to_cartesian(outer_radius, start_angle)
-    outer_end = polar_to_cartesian(outer_radius, end_angle)
+    inner_start = polar_to_cartesian(inner_radius, start_angle_adjusted)
+    inner_end = polar_to_cartesian(inner_radius, end_angle_adjusted)
+    outer_start = polar_to_cartesian(outer_radius, start_angle_adjusted)
+    outer_end = polar_to_cartesian(outer_radius, end_angle_adjusted)
     
     # Create path: inner_start -> outer_start -> outer_arc -> outer_end -> inner_end -> inner_arc -> inner_start
-    large_arc_flag = 1 if (end_angle - start_angle) > 180 else 0
+    large_arc_flag = 1 if (end_angle_adjusted - start_angle_adjusted) > 180 else 0
     
     path = f"M {inner_start[0]},{inner_start[1]} "  # Start at inner start
     path += f"L {outer_start[0]},{outer_start[1]} "  # Line to outer start
@@ -98,7 +115,7 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
         if i <= 1:  # Only for innermost ring
             inner_radius = base_radius + 6 + i*16 # Slightly inside the base radius
             outer_radius = base_radius + 3 * line_spacing + 18 + i*16  # Slightly outside the text area
-            outline_path = create_segment_outline_path(inner_radius, outer_radius, start_angle + 1, end_angle - 1)
+            outline_path = create_segment_outline_path_with_gaps(inner_radius, outer_radius, start_angle, end_angle, gap_size=4)
             
             # Add the shaded box
             box = dwg.path(d=outline_path, fill="#f0f0f0", stroke="lightgray", stroke_width=1)
