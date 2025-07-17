@@ -14,10 +14,10 @@ class Person:
 # Parameters
 center = (500, 500)
 ring_thickness = 80
-num_rings = 3
-ring_radii = [100 + i * ring_thickness for i in range(num_rings)]
-segments_per_ring = [4, 8, 16]
-segment_angles = [50, 25, 12.5]
+num_rings = 4  # Now 4 rings
+ring_radii = [20 + i * ring_thickness for i in range(num_rings)]
+segments_per_ring = [2, 4, 8, 16]  # New innermost ring with 2 segments
+segment_angles = [100, 50, 25, 12.5]  # 200/2, 200/4, 200/8, 200/16
 total_angle = 200
 start_angle_offset = 170
 line_spacing = 16  # spacing between text lines
@@ -55,18 +55,14 @@ def create_segment_outline_path_with_gaps(inner_radius: float, outer_radius: flo
     inner_gap_angle = calculate_gap_angle(gap_size, inner_radius)
     outer_gap_angle = calculate_gap_angle(gap_size, outer_radius)
     
-    # Adjust angles to create even gaps
-    start_angle_adjusted = start_angle + outer_gap_angle
-    end_angle_adjusted = end_angle - outer_gap_angle
-    
     # Calculate the four corners of the segment
-    inner_start = polar_to_cartesian(inner_radius, start_angle_adjusted)
-    inner_end = polar_to_cartesian(inner_radius, end_angle_adjusted)
-    outer_start = polar_to_cartesian(outer_radius, start_angle_adjusted)
-    outer_end = polar_to_cartesian(outer_radius, end_angle_adjusted)
+    inner_start = polar_to_cartesian(inner_radius, start_angle + inner_gap_angle)
+    inner_end = polar_to_cartesian(inner_radius, end_angle - inner_gap_angle)
+    outer_start = polar_to_cartesian(outer_radius, start_angle + outer_gap_angle)
+    outer_end = polar_to_cartesian(outer_radius, end_angle - outer_gap_angle)
     
     # Create path: inner_start -> outer_start -> outer_arc -> outer_end -> inner_end -> inner_arc -> inner_start
-    large_arc_flag = 1 if (end_angle_adjusted - start_angle_adjusted) > 180 else 0
+    large_arc_flag = 1 if (end_angle - start_angle) > 180 else 0
     
     path = f"M {inner_start[0]},{inner_start[1]} "  # Start at inner start
     path += f"L {outer_start[0]},{outer_start[1]} "  # Line to outer start
@@ -112,34 +108,34 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
         lines = [person.name, person.birthdate, person.birthplace]
 
         # Draw shaded box for innermost and outermost ring segments
-        if i <= 1 or i == 2:  # For innermost and outermost ring
-            inner_radius = base_radius + 6 + i*16 # Slightly inside the base radius
-            if i == 2:
-                # For outer ring, extend the box much further out to cover the text rays
-                ray_radius = base_radius + line_spacing
-                outer_radius = ray_radius + 120  # Match ray_end_radius for text
-            else:
-                outer_radius = base_radius + 3 * line_spacing + 18 + i*16  # Slightly outside the text area
-            outline_path = create_segment_outline_path_with_gaps(inner_radius, outer_radius, start_angle, end_angle, gap_size=4)
-            
-            # Add the shaded box
-            box = dwg.path(d=outline_path, fill="#f0f0f0", stroke="lightgray", stroke_width=1)
-            dwg.add(box)
+        
+        inner_radius = base_radius + 6 + i*16 # Slightly inside the base radius
+        if i == 3:
+            # For outer ring, extend the box much further out to cover the text rays
+            ray_radius = base_radius + line_spacing
+            outer_radius = ray_radius + 120  # Match ray_end_radius for text
+        else:
+            outer_radius = base_radius + 3 * line_spacing + 18 + i*16  # Slightly outside the text area
+        outline_path = create_segment_outline_path_with_gaps(inner_radius, outer_radius, start_angle, end_angle, gap_size=4)
+        
+        # Add the shaded box
+        box = dwg.path(d=outline_path, fill="#f0f0f0", stroke="lightgray", stroke_width=1)
+        dwg.add(box)
 
         for k, line in enumerate(lines):  # 3 lines per segment
             # Calculate center point of the segment
             center_angle = (start_angle + end_angle) / 2 
            
-            if i == 2:  # Only outermost ring - use straight lines (rays)
+            if i == 3:  # Only outermost ring - use straight lines (rays)
 
                 # Flip text for left half (upright)
                 flip = 90 < (center_angle % 360) < 270
 
                 # Calculate angles for the 3 lines: -3 degree, center, +3 degree
                 line_angles = [
-                    center_angle - 3,  # First line: -3 degree
+                    center_angle - 2.6,  # First line: -3 degree
                     center_angle,      # Second line: center angle
-                    center_angle + 3   # Third line: +3 degree
+                    center_angle + 2.6   # Third line: +3 degree
                 ]
                 ray_radius = base_radius + line_spacing  # Center radius for all lines
                 ray_start_radius = ray_radius + 20  # Start slightly inward
