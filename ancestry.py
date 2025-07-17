@@ -111,10 +111,15 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
         person = ring_data[i][j]
         lines = [person.name, person.birthdate, person.birthplace]
 
-        # Draw shaded box for innermost ring segments
-        if i <= 1:  # Only for innermost ring
+        # Draw shaded box for innermost and outermost ring segments
+        if i <= 1 or i == 2:  # For innermost and outermost ring
             inner_radius = base_radius + 6 + i*16 # Slightly inside the base radius
-            outer_radius = base_radius + 3 * line_spacing + 18 + i*16  # Slightly outside the text area
+            if i == 2:
+                # For outer ring, extend the box much further out to cover the text rays
+                ray_radius = base_radius + line_spacing
+                outer_radius = ray_radius + 120  # Match ray_end_radius for text
+            else:
+                outer_radius = base_radius + 3 * line_spacing + 18 + i*16  # Slightly outside the text area
             outline_path = create_segment_outline_path_with_gaps(inner_radius, outer_radius, start_angle, end_angle, gap_size=4)
             
             # Add the shaded box
@@ -139,7 +144,7 @@ for i, (base_radius, segments, angle_span) in enumerate(zip(ring_radii, segments
                 # Use the same radius for all 3 lines to center them on the same ray length
                 ray_radius = base_radius + line_spacing  # Center radius for all lines
                 ray_start_radius = ray_radius + 20  # Start slightly inward
-                ray_end_radius = ray_radius + 100  # End slightly outward
+                ray_end_radius = ray_radius + 120  # End slightly outward
                 
                 line_angle = line_angles[k]  # Use the appropriate angle for this line
                 path_d = create_line_path(ray_start_radius, ray_end_radius, line_angle)
