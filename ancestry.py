@@ -237,7 +237,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
             ring_radii[child_idx] + ring_thickness, child_center_angle
         )
 
-        wedding = wedd_data[child_idx+1][i]
+        wedding = wedd_data[child_idx + 1][i]
 
         path_d = f"M {start[0]},{start[1]}"
         path_d += f"L {arc_start[0]},{arc_start[1]}"
@@ -246,12 +246,29 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         path_d += f"M {arc_center[0]},{arc_center[1]}"
         path_d += f"L {child_center[0]},{child_center[1]}"
 
+        arc_path = dwg.path(
+            d=path_d, fill="none", stroke="lightgrey", stroke_width=1
+        )
+        dwg.add(arc_path)
+
+        # invisible arc for text path
+        text_arc_start = polar_to_cartesian(
+            arc_radius + 6, child_center_angle - parent_angle_span / 2
+        )
+        text_arc_end = polar_to_cartesian(
+            arc_radius + 6, child_center_angle + parent_angle_span / 2
+        )
+
+        path_d = f"M {text_arc_start[0]},{text_arc_start[1]}"
+        path_d += f"A {arc_radius},{arc_radius} 0 0,1 {text_arc_end[0]},{text_arc_end[1]}"
         path_id = f"path_w{child_idx}_s{i}"
-        arc_path = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1, id=path_id)
+        arc_path = dwg.path(
+            d=path_d, fill="none", stroke="none", stroke_width=1, id=path_id
+        )
         dwg.add(arc_path)
 
         text = dwg.text(
-            wedding,
+            "",
             font_size="11px",
             text_anchor="middle",
             font_family="Georgia, 'Times New Roman', Times, serif",
@@ -259,6 +276,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         text_path = dwg.textPath(f"#{path_id}", wedding, startOffset="50%")
         text.add(text_path)
         dwg.add(text)
+
 
 draw_parent_child_arcs(0, 1, dwg)
 draw_parent_child_arcs(1, 2, dwg)
