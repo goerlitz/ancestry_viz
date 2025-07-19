@@ -21,7 +21,7 @@ total_angle = 200.0
 segment_angles = [total_angle / i for i in segments_per_ring]  # 200/2, 200/4, ...
 start_radius = 40
 ring_thickness = 64
-ring_gap = 40
+ring_gap = 44
 ring_radii = [start_radius + i * (ring_thickness + ring_gap) for i in range(num_rings)]
 start_angle_offset = 170
 line_spacing = 16  # spacing between text lines
@@ -125,7 +125,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
 
 # Create SVG drawing
 dwg = svgwrite.Drawing("./radial_family.svg", size=("1000px", "1000px"))
-dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
+# dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
 
 # Draw visible arcs and attach each text line to its own path
 for ring_no, (base_radius, segments, angle_span) in enumerate(
@@ -192,13 +192,19 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             start_offset = "50%"
 
             path_id = f"path_r{ring_no}_s{seg_no}_l{3-k}"
-            path = dwg.path(d=path_d, fill="none", stroke="white", id=path_id)
+            path = dwg.path(
+                d=path_d,
+                fill="none",
+                stroke="white",
+                id=path_id,
+                stroke_dasharray="2,2",
+            )
             dwg.add(path)
 
             # Add text to each individual arc path
             text = dwg.text(
                 "",
-                font_size="11px",
+                font_size="13px",
                 text_anchor=text_anchor,
                 font_family="Georgia, 'Times New Roman', Times, serif",
             )
@@ -212,19 +218,17 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
     child_count = segments_per_ring[child_idx]
     parent_angle_span = segment_angles[parent_idx]
     child_angle_span = segment_angles[child_idx]
-    arc_radius = ring_radii[parent_idx] - ring_gap / 3 * 2
+    arc_radius = ring_radii[parent_idx] - ring_gap / 2
     num_parents = parent_count
     num_children = child_count
 
     for i in range(num_children):
-        child_center_angle = (
-            i * child_angle_span + start_angle_offset + child_angle_span / 2
-        )
+        child_center_angle = start_angle_offset + (i + 0.5) * child_angle_span
         start = polar_to_cartesian(
-            ring_radii[parent_idx], child_center_angle - parent_angle_span / 2
+            ring_radii[parent_idx] - 4, child_center_angle - parent_angle_span / 2
         )
         end = polar_to_cartesian(
-            ring_radii[parent_idx], child_center_angle + parent_angle_span / 2
+            ring_radii[parent_idx] - 4, child_center_angle + parent_angle_span / 2
         )
         arc_start = polar_to_cartesian(
             arc_radius, child_center_angle - parent_angle_span / 2
@@ -234,7 +238,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         )
         arc_center = polar_to_cartesian(arc_radius, child_center_angle)
         child_center = polar_to_cartesian(
-            ring_radii[child_idx] + ring_thickness, child_center_angle
+            ring_radii[child_idx] + 4 + ring_thickness, child_center_angle
         )
 
         wedding = wedd_data[child_idx + 1][i]
@@ -246,9 +250,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         path_d += f"M {arc_center[0]},{arc_center[1]}"
         path_d += f"L {child_center[0]},{child_center[1]}"
 
-        arc_path = dwg.path(
-            d=path_d, fill="none", stroke="lightgrey", stroke_width=1
-        )
+        arc_path = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
         dwg.add(arc_path)
 
         # invisible arc for text path
@@ -260,7 +262,9 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         )
 
         path_d = f"M {text_arc_start[0]},{text_arc_start[1]}"
-        path_d += f"A {arc_radius},{arc_radius} 0 0,1 {text_arc_end[0]},{text_arc_end[1]}"
+        path_d += (
+            f"A {arc_radius},{arc_radius} 0 0,1 {text_arc_end[0]},{text_arc_end[1]}"
+        )
         path_id = f"path_w{child_idx}_s{i}"
         arc_path = dwg.path(
             d=path_d, fill="none", stroke="none", stroke_width=1, id=path_id
@@ -269,7 +273,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
 
         text = dwg.text(
             "",
-            font_size="11px",
+            font_size="12px",
             text_anchor="middle",
             font_family="Georgia, 'Times New Roman', Times, serif",
         )
@@ -281,5 +285,28 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
 draw_parent_child_arcs(0, 1, dwg)
 draw_parent_child_arcs(1, 2, dwg)
 draw_parent_child_arcs(2, 3, dwg)
+
+start = polar_to_cartesian(ring_radii[0] + ring_thickness / 2, 170)
+end = polar_to_cartesian(ring_radii[0] + ring_thickness / 2, 370)
+
+path_d = f"M {start[0]},{start[1]}"
+path_d += f"L {start[0]},{start[1]+20}"
+path_d += f"L {end[0]},{end[1]+20}"
+path_d += f"L {end[0]},{end[1]}"
+path_d += f"M {(start[0]+end[0])/2},{end[1]+20}"
+path_d += f"L {(start[0]+end[0])/2},{end[1]+40}"
+connect = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
+dwg.add(connect)
+
 # Save SVG
+# Add centered text 'hello' under the center point
+wedd_text = dwg.text(
+    wedd_data[0][0],
+    insert=(center[0], center[1] + 26),
+    text_anchor="middle",
+    font_size="12px",
+    font_family="Georgia, 'Times New Roman', Times, serif",
+)
+dwg.add(wedd_text)
+
 dwg.save()
