@@ -11,7 +11,7 @@ class Person:
     ring: int
     name: str
     birthdate: str
-    birthplace: str
+    deathdate: str
 
 
 # Parameters
@@ -118,7 +118,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                     ring=ring_no,
                     name=row["name"],
                     birthdate=row["birthdate"],
-                    birthplace=row["birthplace"],
+                    deathdate=row["birthplace"],
                 )
                 children[ring_no - 10].append(person)
             else:
@@ -126,7 +126,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                     ring=ring_no,
                     name=row["name"],
                     birthdate=row["birthdate"],
-                    birthplace=row["birthplace"],
+                    deathdate=row["birthplace"],
                 )
                 people_by_ring[person.ring].append(person)
 
@@ -160,7 +160,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
         # Get person data for this segment
         person = ring_data[ring_no][seg_no]
-        lines = [person.name, person.birthdate, person.birthplace]
+        lines = [person.name, person.birthdate] if ring_no == 0 else [person.name, person.birthdate, person.deathdate]
 
         # Draw shaded box for innermost and outermost ring segments
 
@@ -208,6 +208,8 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
             else:  # Inner rings - use curved arcs
                 radius = base_radius + (2.8 - k) * line_spacing  # offset each line
+                if ring_no == 0:  # Innermost ring - center 2 lines
+                    radius = base_radius + (2.4 - k) * line_spacing
                 large_arc_flag = 1 if angle_span > 180 else 0
                 path_d = create_arc_path(
                     radius, start_angle, end_angle, large_arc_flag, gap_size=12
@@ -220,7 +222,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             path = dwg.path(
                 d=path_d,
                 fill="none",
-                stroke="white",
+                stroke="none",
                 id=path_id,
                 stroke_dasharray="2,2",
             )
@@ -229,7 +231,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             # Add text to each individual arc path
             text = dwg.text(
                 "",
-                font_size="13px",
+                font_size="13px" if ring_no != 0 else "15px",
                 text_anchor=text_anchor,
                 font_family="Georgia, 'Times New Roman', Times, serif",
             )
@@ -307,7 +309,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         dwg.add(text)
 
 
-def draw_marriage_line(dwg, start, end, date_text=""):
+def draw_marriage_line(dwg, start, end, date_text="", font_size="12px"):
     path_d = f"M {start[0]},{start[1]}"
     path_d += f"L {start[0]},{start[1]+20}"
     path_d += f"L {end[0]},{end[1]+20}"
@@ -322,7 +324,7 @@ def draw_marriage_line(dwg, start, end, date_text=""):
         date_text,
         insert=((start[0] + end[0]) / 2, end[1] + 14),
         text_anchor="middle",
-        font_size="12px",
+        font_size=font_size,
         font_family="Georgia, 'Times New Roman', Times, serif",
     )
     dwg.add(wedd_text)
@@ -337,7 +339,7 @@ end = polar_to_cartesian(ring_radii[0] + ring_thickness / 2, 370)
 start_child = (center[0] - (box_width + gap) / 2, center[1] + 55)
 end_child = (center[0] + (box_width + gap) / 2, center[1] + 55)
 
-draw_marriage_line(dwg, start, end, wedd_data[0][0])
+draw_marriage_line(dwg, start, end, wedd_data[0][0], font_size="14px")
 
 path_d += f"M {(start[0]+end[0])/2},{end[1]+20}"
 path_d += f"L {(start[0]+end[0])/2},{center[1] + 55}"
@@ -369,7 +371,7 @@ for i, child_person in enumerate(children[0]):  # Using children[0] for the firs
     dwg.add(child_box)
 
     # Add child information (3 lines like segments)
-    lines = [child_person.name, child_person.birthdate, child_person.birthplace]
+    lines = [child_person.name, child_person.birthdate, child_person.deathdate]
     for k, line in enumerate(lines):
         line_y = y + (k + 1.3) * line_spacing  # Use same line_spacing as segments
         child_text = dwg.text(
