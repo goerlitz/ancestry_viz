@@ -25,6 +25,8 @@ ring_gap = 44
 ring_radii = [start_radius + i * (ring_thickness + ring_gap) for i in range(num_rings)]
 start_angle_offset = 170
 line_spacing = 16  # spacing between text lines
+box_width = 120
+box_height = 50
 
 
 def polar_to_cartesian(
@@ -101,6 +103,7 @@ def create_segment_outline_path_with_gaps(
 def load_people_from_csv(filename: str) -> List[List[Person]]:
     people_by_ring = [[] for _ in range(num_rings)]
     weddings_by_ring = [[] for _ in range(num_rings)]
+    children = [[] for _ in range(2)]
 
     with open(filename, "r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -108,6 +111,14 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
             ring_no = int(row["ring"])
             if ring_no >= 100:
                 weddings_by_ring[ring_no - 100].append(row["name"])
+            elif ring_no >= 10:
+                person = Person(
+                    ring=ring_no,
+                    name=row["name"],
+                    birthdate=row["birthdate"],
+                    birthplace=row["birthplace"],
+                )
+                children[ring_no - 10].append(person)
             else:
                 person = Person(
                     ring=ring_no,
@@ -117,11 +128,11 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                 )
                 people_by_ring[person.ring].append(person)
 
-    return (people_by_ring, weddings_by_ring)
+    return (people_by_ring, weddings_by_ring, children)
 
 
 # Load the data
-(ring_data, wedd_data) = load_people_from_csv("people.csv")
+(ring_data, wedd_data, children) = load_people_from_csv("people.csv")
 
 # Create SVG drawing
 dwg = svgwrite.Drawing("./radial_family.svg", size=("1000px", "1000px"))
@@ -308,5 +319,34 @@ wedd_text = dwg.text(
     font_family="Georgia, 'Times New Roman', Times, serif",
 )
 dwg.add(wedd_text)
+
+# Add boxes for children in a horizontal line below center
+for i, child_person in enumerate(children[0]):  # Using children[0] for the first group
+    # Calculate position: center horizontally, below the wedding text
+    x = center[0] - (len(children[0]) - 1) * box_width / 2 + i * box_width
+    y = center[1] + 60  # 60px below center
+
+    # Draw the box
+    child_box = dwg.rect(
+        insert=(x - box_width / 2, y),
+        size=(box_width, box_height),
+        fill="#f0f0f0",
+        stroke="lightgray",
+        stroke_width=1,
+    )
+    dwg.add(child_box)
+
+    # Add child information (3 lines like segments)
+    lines = [child_person.name, child_person.birthdate, child_person.birthplace]
+    for k, line in enumerate(lines):
+        line_y = y + (k + 1) * line_spacing  # Use same line_spacing as segments
+        child_text = dwg.text(
+            line,
+            insert=(x, line_y),
+            text_anchor="middle",
+            font_size="13px",
+            font_family="Georgia, 'Times New Roman', Times, serif",
+        )
+        dwg.add(child_text)
 
 dwg.save()
