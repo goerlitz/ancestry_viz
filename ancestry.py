@@ -3,6 +3,7 @@ import math
 import csv
 from dataclasses import dataclass
 from typing import List, Tuple
+from svgwrite import gradients
 
 
 @dataclass
@@ -138,6 +139,12 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
 # Create SVG drawing
 dwg = svgwrite.Drawing("./radial_family.svg", size=("1000px", "1000px"))
 # dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
+
+# Define gold gradient
+linear_gradient = dwg.linearGradient(id="gold_gradient", x1="0%", y1="0%", x2="0%", y2="100%")
+linear_gradient.add_stop_color(offset="0%", color="#FFD700", opacity=1)
+linear_gradient.add_stop_color(offset="100%", color="#DAA520", opacity=1)
+dwg.defs.add(linear_gradient)
 
 # Draw visible arcs and attach each text line to its own path
 for ring_no, (base_radius, segments, angle_span) in enumerate(
@@ -349,7 +356,7 @@ for i, child_person in enumerate(children[0]):  # Using children[0] for the firs
     child_box = dwg.rect(
         insert=(x - box_width / 2, y),
         size=(box_width, box_height),
-        fill="#f0f0f0",
+        fill="url(#gold_gradient)",
         stroke="lightgray",
         stroke_width=1,
     )
