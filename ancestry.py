@@ -27,6 +27,7 @@ start_angle_offset = 170
 line_spacing = 16  # spacing between text lines
 box_width = 120
 box_height = 50
+gap = 8
 
 
 def polar_to_cartesian(
@@ -293,38 +294,56 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         dwg.add(text)
 
 
+def draw_marriage_line(dwg, start, end, date_text=""):
+    path_d = f"M {start[0]},{start[1]}"
+    path_d += f"L {start[0]},{start[1]+20}"
+    path_d += f"L {end[0]},{end[1]+20}"
+    path_d += f"L {end[0]},{end[1]}"
+
+    line = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
+    dwg.add(line)
+
+    # Save SVG
+    # Add centered text 'hello' under the center point
+    wedd_text = dwg.text(
+        date_text,
+        insert=((start[0] + end[0]) / 2, end[1] + 14),
+        text_anchor="middle",
+        font_size="12px",
+        font_family="Georgia, 'Times New Roman', Times, serif",
+    )
+    dwg.add(wedd_text)
+
+
 draw_parent_child_arcs(0, 1, dwg)
 draw_parent_child_arcs(1, 2, dwg)
 draw_parent_child_arcs(2, 3, dwg)
 
 start = polar_to_cartesian(ring_radii[0] + ring_thickness / 2, 170)
 end = polar_to_cartesian(ring_radii[0] + ring_thickness / 2, 370)
+start_child = (center[0] - (box_width + gap) / 2, center[1] + 55)
+end_child = (center[0] + (box_width + gap) / 2, center[1] + 55)
 
-path_d = f"M {start[0]},{start[1]}"
-path_d += f"L {start[0]},{start[1]+20}"
-path_d += f"L {end[0]},{end[1]+20}"
-path_d += f"L {end[0]},{end[1]}"
+draw_marriage_line(dwg, start, end, wedd_data[0][0])
+
 path_d += f"M {(start[0]+end[0])/2},{end[1]+20}"
-path_d += f"L {(start[0]+end[0])/2},{end[1]+40}"
+path_d += f"L {(start[0]+end[0])/2},{center[1] + 55}"
+path_d += f"M {start_child[0]},{start_child[1]+10}"
+path_d += f"L {start_child[0]},{start_child[1]}"
+path_d += f"L {end_child[0]},{end_child[1]}"
+path_d += f"L {end_child[0]},{end_child[1]+10}"
 connect = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
 dwg.add(connect)
-
-# Save SVG
-# Add centered text 'hello' under the center point
-wedd_text = dwg.text(
-    wedd_data[0][0],
-    insert=(center[0], center[1] + 26),
-    text_anchor="middle",
-    font_size="12px",
-    font_family="Georgia, 'Times New Roman', Times, serif",
-)
-dwg.add(wedd_text)
 
 # Add boxes for children in a horizontal line below center
 for i, child_person in enumerate(children[0]):  # Using children[0] for the first group
     # Calculate position: center horizontally, below the wedding text
-    x = center[0] - (len(children[0]) - 1) * box_width / 2 + i * box_width
-    y = center[1] + 60  # 60px below center
+    x = (
+        center[0]
+        - (len(children[0]) - 1) * (box_width + gap) / 2
+        + i * (box_width + gap)
+    )
+    y = center[1] + 70  # below center
 
     # Draw the box
     child_box = dwg.rect(
@@ -339,7 +358,7 @@ for i, child_person in enumerate(children[0]):  # Using children[0] for the firs
     # Add child information (3 lines like segments)
     lines = [child_person.name, child_person.birthdate, child_person.birthplace]
     for k, line in enumerate(lines):
-        line_y = y + (k + 1) * line_spacing  # Use same line_spacing as segments
+        line_y = y + (k + 1.3) * line_spacing  # Use same line_spacing as segments
         child_text = dwg.text(
             line,
             insert=(x, line_y),
@@ -348,5 +367,19 @@ for i, child_person in enumerate(children[0]):  # Using children[0] for the firs
             font_family="Georgia, 'Times New Roman', Times, serif",
         )
         dwg.add(child_text)
+
+x_offset = 0.5 * (box_width + gap)
+y_offset = center[1] + 124
+draw_marriage_line(
+    dwg,
+    (center[0] - 3 * x_offset, y_offset),
+    (center[0] - x_offset, y_offset),
+)
+draw_marriage_line(
+    dwg,
+    (center[0] + x_offset, y_offset),
+    (center[0] + 3 * x_offset, y_offset),
+    "⚭ 14.7.2011",
+)
 
 dwg.save()
