@@ -30,6 +30,43 @@ box_width = 120
 box_height = 50
 gap = 8
 
+# import matplotlib.pyplot as plt
+# import matplotlib.patches as patches
+import numpy as np
+from matplotlib.colors import to_rgb, to_hex
+# from scipy.interpolate import interp1d
+
+# Define 4 base color pairs (dark to light) for each family line
+color_families = {
+    "Blue": ["#a8bedb", "#dbe9f6"],
+    "Green": ["#a5d0b9", "#d9f2e6"],
+    "Orange": ["#f8bd8d", "#ffe7cc"],
+    "Magenta": ["#e3a7c6", "#f7dbef"],
+}
+
+# Function to interpolate colors in Lab space for perceptual uniformity
+from skimage import color
+
+def interpolate_colors_lab(start_hex, end_hex, n):
+    start_rgb = np.array(to_rgb(start_hex)).reshape(1, 1, 3)
+    end_rgb = np.array(to_rgb(end_hex)).reshape(1, 1, 3)
+
+    start_lab = color.rgb2lab(start_rgb)[0, 0]
+    end_lab = color.rgb2lab(end_rgb)[0, 0]
+
+    labs = np.linspace(start_lab, end_lab, n)
+    rgbs = color.lab2rgb(labs.reshape(n, 1, 3)).reshape(n, 3)
+    hex_colors = [to_hex(np.clip(rgb, 0, 1)) for rgb in rgbs]
+    return hex_colors
+
+# Create the full palette: 4 families × 4 shades = 16 colors
+palette = []
+for family, (start, end) in color_families.items():
+    shades = interpolate_colors_lab(start, end, 4)
+    palette.extend(shades)
+
+print(palette)
+
 
 def polar_to_cartesian(
     radius: float, angle_degrees: float, center_point: Tuple[int, int] = center
@@ -178,11 +215,17 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         )
 
         # Add the shaded box
+        if ring_no == 0:
+            fill = "url(#gold_gradient)"
+        else:
+            step = 16 // segments_per_ring[ring_no]
+            fill = palette[seg_no * step]
+        stroke = "#4A90E2" if seg_no % 2 == 0 else "#FF6EC7"
         box = dwg.path(
             d=outline_path,
-            fill="url(#gold_gradient)" if ring_no == 0 else "#f0f0f0",
-            stroke="lightgray",
-            stroke_width=1,
+            fill=fill,
+            stroke=stroke,
+            stroke_width=1.5,
         )
         dwg.add(box)
 
