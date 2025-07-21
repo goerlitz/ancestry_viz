@@ -130,6 +130,8 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                 )
                 people_by_ring[person.ring].append(person)
 
+    print("children", children[1])
+
     return (people_by_ring, weddings_by_ring, children)
 
 
@@ -141,7 +143,9 @@ dwg = svgwrite.Drawing("./radial_family.svg", size=("1000px", "1000px"))
 # dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
 
 # Define shiny gold gradient
-linear_gradient = dwg.linearGradient(id="gold_gradient", x1="10%", y1="0%", x2="15%", y2="100%")
+linear_gradient = dwg.linearGradient(
+    id="gold_gradient", x1="10%", y1="0%", x2="15%", y2="100%"
+)
 linear_gradient.add_stop_color(offset="0%", color="#BF953F", opacity=1)
 linear_gradient.add_stop_color(offset="25%", color="#FCF6BA", opacity=1)
 linear_gradient.add_stop_color(offset="50%", color="#C19A2E", opacity=1)
@@ -160,7 +164,11 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
         # Get person data for this segment
         person = ring_data[ring_no][seg_no]
-        lines = [person.name, person.birthdate] if ring_no == 0 else [person.name, person.birthdate, person.deathdate]
+        lines = (
+            [person.name, person.birthdate]
+            if ring_no == 0
+            else [person.name, person.birthdate, person.deathdate]
+        )
 
         # Draw shaded box for innermost and outermost ring segments
 
@@ -173,10 +181,10 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
         # Add the shaded box
         box = dwg.path(
-            d=outline_path, 
-            fill="url(#gold_gradient)" if ring_no == 0 else "#f0f0f0", 
-            stroke="lightgray", 
-            stroke_width=1
+            d=outline_path,
+            fill="url(#gold_gradient)" if ring_no == 0 else "#f0f0f0",
+            stroke="lightgray",
+            stroke_width=1,
         )
         dwg.add(box)
 
@@ -396,5 +404,45 @@ draw_marriage_line(
     (center[0] + 3 * x_offset, y_offset),
     "⚭ 14.7.2011",
 )
+
+# Add boxes for children in a horizontal line below center
+for i, child_person in enumerate(children[1]):
+
+    if not child_person.name:
+        continue
+
+    # Calculate position: center horizontally, below the wedding text
+    x = (
+        center[0]
+        - (len(children[0]) - 1) * (box_width + gap) / 2
+        + i * (box_width + gap)
+    )
+    if i < len(children[1]) - 1 and not children[1][i + 1].name:
+        x += (box_width + gap) / 2
+
+    y = center[1] + 170  # below center
+
+    # Draw the box
+    child_box = dwg.rect(
+        insert=(x - box_width / 2, y),
+        size=(box_width, box_height),
+        fill="#f0f0f0",
+        stroke="lightgray",
+        stroke_width=1,
+    )
+    dwg.add(child_box)
+
+    # Add child information (3 lines like segments)
+    lines = [child_person.name, child_person.birthdate, child_person.deathdate]
+    for k, line in enumerate(lines):
+        line_y = y + (k + 1.3) * line_spacing  # Use same line_spacing as segments
+        child_text = dwg.text(
+            line,
+            insert=(x, line_y),
+            text_anchor="middle",
+            font_size="13px",
+            font_family="Georgia, 'Times New Roman', Times, serif",
+        )
+        dwg.add(child_text)
 
 dwg.save()
