@@ -34,7 +34,6 @@ gap = 8
 # import matplotlib.patches as patches
 import numpy as np
 from matplotlib.colors import to_rgb, to_hex
-# from scipy.interpolate import interp1d
 
 # Define 4 base color pairs (dark to light) for each family line
 color_families = {
@@ -46,6 +45,7 @@ color_families = {
 
 # Function to interpolate colors in Lab space for perceptual uniformity
 from skimage import color
+
 
 def interpolate_colors_lab(start_hex, end_hex, n):
     start_rgb = np.array(to_rgb(start_hex)).reshape(1, 1, 3)
@@ -59,13 +59,12 @@ def interpolate_colors_lab(start_hex, end_hex, n):
     hex_colors = [to_hex(np.clip(rgb, 0, 1)) for rgb in rgbs]
     return hex_colors
 
+
 # Create the full palette: 4 families × 4 shades = 16 colors
 palette = []
 for family, (start, end) in color_families.items():
     shades = interpolate_colors_lab(start, end, 4)
     palette.extend(shades)
-
-print(palette)
 
 
 def polar_to_cartesian(
@@ -260,8 +259,12 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                 if ring_no == 0:  # Innermost ring - center 2 lines
                     radius = base_radius + (2.4 - k) * line_spacing
                 large_arc_flag = 1 if angle_span > 180 else 0
+                if ring_no in [1, 2] and k > 0:
+                    arc_end = (start_angle + end_angle) / 2
+                else:
+                    arc_end = end_angle
                 path_d = create_arc_path(
-                    radius, start_angle, end_angle, large_arc_flag, gap_size=12
+                    radius, start_angle, arc_end, large_arc_flag, gap_size=12 if k == 0 else 2
                 )
 
             text_anchor = "middle"
@@ -278,9 +281,20 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             dwg.add(path)
 
             # Add text to each individual arc path
+            if ring_no in [1, 2] and k > 0:
+                text_anchor = "end"
+                start_offset = "100%"
+            else:
+                text_anchor = "middle"
+                start_offset = "50%"
+
+            if ring_no == 0:
+                font_size = "15px" if k == 0 else "13px"
+            else:
+                font_size = "13px" if k == 0 else "10px"
             text = dwg.text(
                 "",
-                font_size="13px" if ring_no != 0 else "15px",
+                font_size=font_size,
                 text_anchor=text_anchor,
                 font_family="Georgia, 'Times New Roman', Times, serif",
             )
