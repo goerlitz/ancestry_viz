@@ -71,14 +71,14 @@ def calculate_gap_angle(gap_size: float, radius: float) -> float:
     return (gap_size / radius) * (180 / math.pi)
 
 
-def create_segment_outline_path_with_gaps(
+def create_ring_segment(
     inner_radius: float,
     outer_radius: float,
     start_angle: float,
     end_angle: float,
     gap_size: float = 5,
 ) -> str:
-    """Create an SVG path that outlines a segment with rays and arcs, with even gaps between segments."""
+    """Create an SVG path that outlines a ring segment with rays and arcs and gaps between segments."""
     # Calculate angle offsets for even gaps at inner and outer radii
     inner_gap_angle = calculate_gap_angle(gap_size, inner_radius)
     outer_gap_angle = calculate_gap_angle(gap_size, outer_radius)
@@ -130,7 +130,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                 )
                 people_by_ring[person.ring].append(person)
 
-    print("children", children[1])
+    # print("children", children[1])
 
     return (people_by_ring, weddings_by_ring, children)
 
@@ -170,12 +170,10 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             else [person.name, person.birthdate, person.deathdate]
         )
 
-        # Draw shaded box for innermost and outermost ring segments
-
         inner_radius = base_radius
         outer_radius = base_radius + (130 if ring_no == 3 else ring_thickness)
 
-        outline_path = create_segment_outline_path_with_gaps(
+        outline_path = create_ring_segment(
             inner_radius, outer_radius, start_angle, end_angle, gap_size=4
         )
 
@@ -358,39 +356,6 @@ path_d += f"L {end_child[0]},{end_child[1]+10}"
 connect = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
 dwg.add(connect)
 
-# Add boxes for children in a horizontal line below center
-for i, child_person in enumerate(children[0]):  # Using children[0] for the first group
-    # Calculate position: center horizontally, below the wedding text
-    x = (
-        center[0]
-        - (len(children[0]) - 1) * (box_width + gap) / 2
-        + i * (box_width + gap)
-    )
-    y = center[1] + 70  # below center
-
-    # Draw the box
-    child_box = dwg.rect(
-        insert=(x - box_width / 2, y),
-        size=(box_width, box_height),
-        fill="#f0f0f0",
-        stroke="lightgray",
-        stroke_width=1,
-    )
-    dwg.add(child_box)
-
-    # Add child information (3 lines like segments)
-    lines = [child_person.name, child_person.birthdate, child_person.deathdate]
-    for k, line in enumerate(lines):
-        line_y = y + (k + 1.3) * line_spacing  # Use same line_spacing as segments
-        child_text = dwg.text(
-            line,
-            insert=(x, line_y),
-            text_anchor="middle",
-            font_size="13px",
-            font_family="Georgia, 'Times New Roman', Times, serif",
-        )
-        dwg.add(child_text)
-
 x_offset = 0.5 * (box_width + gap)
 y_offset = center[1] + 124
 draw_marriage_line(
@@ -405,44 +370,53 @@ draw_marriage_line(
     "⚭ 14.7.2011",
 )
 
-# Add boxes for children in a horizontal line below center
-for i, child_person in enumerate(children[1]):
 
-    if not child_person.name:
-        continue
+def draw_children_boxes(dwg, y_offset):
+    for line_no in range(len(children)):
+        for i, child in enumerate(children[line_no]):
 
-    # Calculate position: center horizontally, below the wedding text
-    x = (
-        center[0]
-        - (len(children[0]) - 1) * (box_width + gap) / 2
-        + i * (box_width + gap)
-    )
-    if i < len(children[1]) - 1 and not children[1][i + 1].name:
-        x += (box_width + gap) / 2
+            # skip empty children
+            if not child.name:
+                continue
 
-    y = center[1] + 170  # below center
+            # Calculate position
+            x = (
+                center[0]
+                - (len(children[line_no]) - 1) * (box_width + gap) / 2
+                + i * (box_width + gap)
+            )
+            # if the next child is empty, move the box to the right
+            if i < len(children[line_no]) - 1 and not children[line_no][i + 1].name:
+                x += (box_width + gap) / 2
 
-    # Draw the box
-    child_box = dwg.rect(
-        insert=(x - box_width / 2, y),
-        size=(box_width, box_height),
-        fill="#f0f0f0",
-        stroke="lightgray",
-        stroke_width=1,
-    )
-    dwg.add(child_box)
+            y = center[1] + y_offset + line_no * (box_height + ring_gap)
 
-    # Add child information (3 lines like segments)
-    lines = [child_person.name, child_person.birthdate, child_person.deathdate]
-    for k, line in enumerate(lines):
-        line_y = y + (k + 1.3) * line_spacing  # Use same line_spacing as segments
-        child_text = dwg.text(
-            line,
-            insert=(x, line_y),
-            text_anchor="middle",
-            font_size="13px",
-            font_family="Georgia, 'Times New Roman', Times, serif",
-        )
-        dwg.add(child_text)
+            # Draw the box
+            child_box = dwg.rect(
+                insert=(x - box_width / 2, y),
+                size=(box_width, box_height),
+                fill="#f0f0f0",
+                stroke="lightgray",
+                stroke_width=1,
+            )
+            dwg.add(child_box)
+
+            # Add child information (3 lines like segments)
+            lines = [child.name, child.birthdate, child.deathdate]
+            for k, line in enumerate(lines):
+                line_y = (
+                    y + (k + 1.3) * line_spacing
+                )  # Use same line_spacing as segments
+                child_text = dwg.text(
+                    line,
+                    insert=(x, line_y),
+                    text_anchor="middle",
+                    font_size="13px",
+                    font_family="Georgia, 'Times New Roman', Times, serif",
+                )
+                dwg.add(child_text)
+
+
+draw_children_boxes(dwg, 70)
 
 dwg.save()
