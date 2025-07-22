@@ -231,7 +231,17 @@ def create_text_line_paths(
         start = start_radius + gap_size
         end = end_radius - gap_size
         angles = line_angles
-    return [create_line_path(start, end, angle) for angle in angles]
+    return [
+        (
+            create_line_path(start, end, angle)
+            if i == 0
+            else [
+                create_line_path(start, (start + end) / 2, angle),
+                create_line_path((start + end) / 2, end, angle),
+            ]
+        )
+        for i, angle in enumerate(angles)
+    ]
 
 
 def create_text_arc_paths(
@@ -363,7 +373,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
             else:
 
-                if ring_no in [1, 2] and k > 0:
+                if ring_no > 0 and k > 0:
                     # Split value into date and place
                     value = line
                     if ":" in value:
