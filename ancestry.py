@@ -15,15 +15,22 @@ class Person:
 
 
 # Parameters
-center = (500, 500)
-num_rings = 4
-segments_per_ring = [2, 4, 8, 16]
+center = (750, 750)
+num_rings = 5
+segments_per_ring = [2, 4, 8, 16, 32]
 total_angle = 200.0
 segment_angles = [total_angle / i for i in segments_per_ring]  # 200/2, 200/4, ...
 start_radius = 40
-ring_thickness = 64
-ring_gap = 44
-ring_radii = [start_radius + i * (ring_thickness + ring_gap) for i in range(num_rings)]
+ring_gap = 56
+ring_thickness = 64  # total = 120
+ring_thickness_outer = 124
+ring_radii = [
+    start_radius
+    + min(i, 3) * ring_thickness
+    + max(i - 3, 0) * ring_thickness_outer
+    + i * ring_gap
+    for i in range(num_rings)
+]
 start_angle_offset = 170
 line_spacing = 16  # spacing between text lines
 box_width = 120
@@ -34,6 +41,7 @@ gap = 8
 # import matplotlib.patches as patches
 import numpy as np
 from matplotlib.colors import to_rgb, to_hex
+from skimage import color  # interpolate colors in Lab space for perceptual uniformity
 
 # Define 4 base color pairs (dark to light) for each family line
 color_families = {
@@ -42,9 +50,6 @@ color_families = {
     "Orange": ["#f8bd8d", "#ffe7cc"],
     "Magenta": ["#e3a7c6", "#f7dbef"],
 }
-
-# Function to interpolate colors in Lab space for perceptual uniformity
-from skimage import color
 
 
 def interpolate_colors_lab(start_hex, end_hex, n):
@@ -63,7 +68,7 @@ def interpolate_colors_lab(start_hex, end_hex, n):
 # Create the full palette: 4 families × 4 shades = 16 colors
 palette = []
 for family, (start, end) in color_families.items():
-    shades = interpolate_colors_lab(start, end, 4)
+    shades = interpolate_colors_lab(start, end, 8)
     palette.extend(shades)
 
 
@@ -166,8 +171,6 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                 )
                 people_by_ring[person.ring].append(person)
 
-    # print("children", children[1])
-
     return (people_by_ring, weddings_by_ring, children)
 
 
@@ -175,7 +178,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
 (ring_data, wedd_data, children) = load_people_from_csv("people.csv")
 
 # Create SVG drawing
-dwg = svgwrite.Drawing("./radial_family.svg", size=("1000px", "1000px"))
+dwg = svgwrite.Drawing("./radial_family.svg", size=("1500px", "1500px"))
 # dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
 
 # Define shiny gold gradient
@@ -207,7 +210,9 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         )
 
         inner_radius = base_radius
-        outer_radius = base_radius + (130 if ring_no == 3 else ring_thickness)
+        outer_radius = base_radius + (
+            ring_thickness_outer if ring_no >= 3 else ring_thickness
+        )
 
         outline_path = create_ring_segment(
             inner_radius, outer_radius, start_angle, end_angle, gap_size=4
@@ -217,7 +222,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         if ring_no == 0:
             fill = "url(#gold_gradient)"
         else:
-            step = 16 // segments_per_ring[ring_no]
+            step = 32 // segments_per_ring[ring_no]
             fill = palette[seg_no * step]
         stroke = "#4A90E2" if seg_no % 2 == 0 else "#FF6EC7"
         box = dwg.path(
@@ -231,17 +236,18 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         for k, line in enumerate(lines):  # 3 lines per segment
             # Calculate center point of the segment
             center_angle = (start_angle + end_angle) / 2
+            line_spread = (end_angle - start_angle) / 5
 
-            if ring_no == 3:  # Only outermost ring - use straight lines (rays)
+            if ring_no >= 3:  # Only outermost ring - use straight lines (rays)
 
                 # Flip text for left half (upright)
                 flip = 90 < (center_angle % 360) < 270
 
                 # Calculate angles for the 3 lines: -3 degree, center, +3 degree
                 line_angles = [
-                    center_angle - 2.6,  # First line: -3 degree
+                    center_angle - line_spread,  # First line: -3 degree
                     center_angle,  # Second line: center angle
-                    center_angle + 2.6,  # Third line: +3 degree
+                    center_angle + line_spread,  # Third line: +3 degree
                 ]
                 # Center radius for all lines
                 start_radius = base_radius + 8  # Start slightly inward
@@ -264,7 +270,11 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                 else:
                     arc_end = end_angle
                 path_d = create_arc_path(
-                    radius, start_angle, arc_end, large_arc_flag, gap_size=12 if k == 0 else 2
+                    radius,
+                    start_angle,
+                    arc_end,
+                    large_arc_flag,
+                    gap_size=12 if k == 0 else 2,
                 )
 
             text_anchor = "middle"
@@ -282,16 +292,76 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
             # Add text to each individual arc path
             if ring_no in [1, 2] and k > 0:
+                # Split value into date and place
+                value = line
+                if ":" in value:
+                    date_part, place_part = value.split(":", 1)
+                else:
+                    date_part, place_part = value, ""
+                # Date: right-aligned, left arc
                 text_anchor = "end"
                 start_offset = "100%"
+                font_size = "11px"
+                arc_end = (start_angle + end_angle) / 2
+                path_d = create_arc_path(
+                    radius, start_angle, arc_end, large_arc_flag, gap_size=2
+                )
+                path_id = f"path_r{ring_no}_s{seg_no}_l{3-k}_date"
+                path = dwg.path(
+                    d=path_d,
+                    fill="none",
+                    stroke="none",
+                    id=path_id,
+                    stroke_dasharray="2,2",
+                )
+                dwg.add(path)
+                text = dwg.text(
+                    "",
+                    font_size=font_size,
+                    text_anchor=text_anchor,
+                    font_family="Georgia, 'Times New Roman', Times, serif",
+                )
+                text_path = dwg.textPath(
+                    f"#{path_id}", date_part, startOffset=start_offset
+                )
+                text.add(text_path)
+                dwg.add(text)
+                # Place: left-aligned, right arc (if present)
+                if place_part.strip():
+                    text_anchor = "start"
+                    start_offset = "0%"
+                    arc_start = (start_angle + end_angle) / 2
+                    path_d = create_arc_path(
+                        radius, arc_start, end_angle, large_arc_flag, gap_size=2
+                    )
+                    path_id = f"path_r{ring_no}_s{seg_no}_l{3-k}_place"
+                    path = dwg.path(
+                        d=path_d,
+                        fill="none",
+                        stroke="none",
+                        id=path_id,
+                        stroke_dasharray="2,2",
+                    )
+                    dwg.add(path)
+                    text = dwg.text(
+                        "",
+                        font_size=font_size,
+                        text_anchor=text_anchor,
+                        font_family="Georgia, 'Times New Roman', Times, serif",
+                    )
+                    text_path = dwg.textPath(
+                        f"#{path_id}", place_part.strip(), startOffset=start_offset
+                    )
+                    text.add(text_path)
+                    dwg.add(text)
+                continue  # skip the rest of the loop for this line
             else:
+                if ring_no == 0:
+                    font_size = "15px" if k == 0 else "13px"
+                else:
+                    font_size = "13px" if k == 0 else "11px"
                 text_anchor = "middle"
                 start_offset = "50%"
-
-            if ring_no == 0:
-                font_size = "15px" if k == 0 else "13px"
-            else:
-                font_size = "13px" if k == 0 else "10px"
             text = dwg.text(
                 "",
                 font_size=font_size,
@@ -309,10 +379,8 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
     parent_angle_span = segment_angles[parent_idx]
     child_angle_span = segment_angles[child_idx]
     arc_radius = ring_radii[parent_idx] - ring_gap / 2
-    num_parents = parent_count
-    num_children = child_count
 
-    for i in range(num_children):
+    for i in range(child_count):
         child_center_angle = start_angle_offset + (i + 0.5) * child_angle_span
         start = polar_to_cartesian(
             ring_radii[parent_idx] - 4, child_center_angle - parent_angle_span / 2
@@ -328,7 +396,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         )
         arc_center = polar_to_cartesian(arc_radius, child_center_angle)
         child_center = polar_to_cartesian(
-            ring_radii[child_idx] + 4 + ring_thickness, child_center_angle
+            ring_radii[parent_idx] - ring_gap + 4, child_center_angle
         )
 
         wedding = wedd_data[child_idx + 1][i]
@@ -396,6 +464,7 @@ def draw_marriage_line(dwg, start, end, date_text="", font_size="12px"):
 draw_parent_child_arcs(0, 1, dwg)
 draw_parent_child_arcs(1, 2, dwg)
 draw_parent_child_arcs(2, 3, dwg)
+draw_parent_child_arcs(3, 4, dwg)
 
 start = polar_to_cartesian(ring_radii[0] + ring_thickness / 2, 170)
 end = polar_to_cartesian(ring_radii[0] + ring_thickness / 2, 370)
