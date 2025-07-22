@@ -90,11 +90,15 @@ def create_arc_path(
     end_angle: float,
     large_arc_flag: int = 0,
     gap_size: float = 5,
+    gap_left: bool = True,
+    gap_right: bool = True,
 ) -> str:
     """Create an SVG arc path string."""
     gap_angle = calculate_gap_angle(gap_size, radius)
-    start_point = polar_to_cartesian(radius, start_angle + gap_angle)
-    end_point = polar_to_cartesian(radius, end_angle - gap_angle)
+    start_point = polar_to_cartesian(
+        radius, start_angle + (gap_angle if gap_left else 0)
+    )
+    end_point = polar_to_cartesian(radius, end_angle - (gap_angle if gap_right else 0))
     return f"M {start_point[0]},{start_point[1]} A {radius},{radius} 0 {large_arc_flag},1 {end_point[0]},{end_point[1]}"
 
 
@@ -243,10 +247,49 @@ def create_text_arc_paths(
     line_spread = (end_radius - start_radius) / (lines + 1)
     radii = [end_radius - (i + 1.2) * line_spread for i in range(lines)]
 
+    # first line is full arc, rest are split into two arcs
     return [
-        create_arc_path(radius, start_angle, end_angle, gap_size=gap_size)
+        (
+            create_arc_path(radius, start_angle, end_angle, gap_size=gap_size)
+            if i == 0
+            else [
+                create_arc_path(
+                    radius,
+                    start_angle,
+                    center_angle,
+                    gap_size=gap_size,
+                    gap_right=False,
+                ),
+                create_arc_path(
+                    radius, center_angle, end_angle, gap_size=gap_size, gap_left=False
+                ),
+            ]
+        )
         for i, radius in enumerate(radii)
     ]
+
+
+def create_text_path(dwg, path_d, path_id):
+    path = dwg.path(
+        d=path_d,
+        fill="none",
+        stroke="none",
+        id=path_id,
+        # stroke_dasharray="2,2",
+    )
+    dwg.add(path)
+
+
+def create_text(dwg, font_size, text_anchor, path_id, line, start_offset):
+    text = dwg.text(
+        "",
+        font_size=font_size,
+        text_anchor=text_anchor,
+        font_family="Georgia, 'Times New Roman', Times, serif",
+    )
+    text_path = dwg.textPath(f"#{path_id}", line, startOffset=start_offset)
+    text.add(text_path)
+    dwg.add(text)
 
 
 # Draw visible arcs and attach each text line to its own path
@@ -290,126 +333,57 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
         )
         dwg.add(box)
 
+        if ring_no >= 3:  # Only outermost ring - use straight lines (rays)
+            text_paths = create_text_line_paths(
+                start_angle, end_angle, inner_radius, outer_radius, gap_size=4
+            )
+        else:
+            num = 2 if ring_no == 0 else 3
+            text_paths = create_text_arc_paths(
+                start_angle,
+                end_angle,
+                inner_radius,
+                outer_radius,
+                gap_size=6,
+                lines=num,
+            )
+
         for k, line in enumerate(lines):  # 3 lines per segment
 
-            if ring_no >= 3:  # Only outermost ring - use straight lines (rays)
+            text_path = text_paths[k]
+            if ring_no == 0:
+                font_size = "15px" if k == 0 else "13px"
+            else:
+                font_size = "13px" if k == 0 else "11px"
 
-                text_line_paths = create_text_line_paths(
-                    start_angle, end_angle, inner_radius, outer_radius, gap_size=4
-                )
-                path_d = text_line_paths[k]
+            if k == 0:
+                path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
+                create_text_path(dwg, text_path, path_id)
+                create_text(dwg, font_size, "middle", path_id, line, "50%")
 
             else:
 
-                text_arc_paths = create_text_arc_paths(
-                    start_angle,
-                    end_angle,
-                    inner_radius,
-                    outer_radius,
-                    gap_size=8,
-                    lines=2 if ring_no == 0 else 3,
-                )
-                path_d = text_arc_paths[k]
+                if ring_no in [1, 2] and k > 0:
+                    # Split value into date and place
+                    value = line
+                    if ":" in value:
+                        date_part, place_part = value.split(":", 1)
+                    else:
+                        date_part, place_part = value, ""
 
-                radius = base_radius + (2.8 - k) * line_spacing  # offset each line
-                if ring_no == 0:  # Innermost ring - center 2 lines
-                    radius = base_radius + (2.4 - k) * line_spacing
-                large_arc_flag = 1 if angle_span > 180 else 0
+                    # Date: right-aligned, left arc
+                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}_date"
+                    create_text_path(dwg, text_path[0], path_id)
+                    create_text(dwg, "11px", "end", path_id, date_part, "96%")
 
-            text_anchor = "middle"
-            start_offset = "50%"
-
-            path_id = f"path_r{ring_no}_s{seg_no}_l{3-k}"
-            path = dwg.path(
-                d=path_d,
-                fill="none",
-                stroke="none",
-                id=path_id,
-                stroke_dasharray="2,2",
-            )
-            dwg.add(path)
-
-            # Add text to each individual arc path
-            if ring_no in [1, 2] and k > 0:
-                # Split value into date and place
-                value = line
-                if ":" in value:
-                    date_part, place_part = value.split(":", 1)
+                    # Place: left-aligned, right arc
+                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}_place"
+                    create_text_path(dwg, text_path[1], path_id)
+                    create_text(dwg, "11px", "start", path_id, place_part, "4%")
                 else:
-                    date_part, place_part = value, ""
-                # Date: right-aligned, left arc
-                text_anchor = "end"
-                start_offset = "100%"
-                font_size = "11px"
-                arc_end = (start_angle + end_angle) / 2
-                path_d = create_arc_path(
-                    radius, start_angle, arc_end, large_arc_flag, gap_size=2
-                )
-                path_id = f"path_r{ring_no}_s{seg_no}_l{3-k}_date"
-                path = dwg.path(
-                    d=path_d,
-                    fill="none",
-                    stroke="none",
-                    id=path_id,
-                    stroke_dasharray="2,2",
-                )
-                dwg.add(path)
-                text = dwg.text(
-                    "",
-                    font_size=font_size,
-                    text_anchor=text_anchor,
-                    font_family="Georgia, 'Times New Roman', Times, serif",
-                )
-                text_path = dwg.textPath(
-                    f"#{path_id}", date_part, startOffset=start_offset
-                )
-                text.add(text_path)
-                dwg.add(text)
-                # Place: left-aligned, right arc (if present)
-                if place_part.strip():
-                    text_anchor = "start"
-                    start_offset = "0%"
-                    arc_start = (start_angle + end_angle) / 2
-                    path_d = create_arc_path(
-                        radius, arc_start, end_angle, large_arc_flag, gap_size=2
-                    )
-                    path_id = f"path_r{ring_no}_s{seg_no}_l{3-k}_place"
-                    path = dwg.path(
-                        d=path_d,
-                        fill="none",
-                        stroke="none",
-                        id=path_id,
-                        stroke_dasharray="2,2",
-                    )
-                    dwg.add(path)
-                    text = dwg.text(
-                        "",
-                        font_size=font_size,
-                        text_anchor=text_anchor,
-                        font_family="Georgia, 'Times New Roman', Times, serif",
-                    )
-                    text_path = dwg.textPath(
-                        f"#{path_id}", place_part.strip(), startOffset=start_offset
-                    )
-                    text.add(text_path)
-                    dwg.add(text)
-                continue  # skip the rest of the loop for this line
-            else:
-                if ring_no == 0:
-                    font_size = "15px" if k == 0 else "13px"
-                else:
-                    font_size = "13px" if k == 0 else "11px"
-                text_anchor = "middle"
-                start_offset = "50%"
-            text = dwg.text(
-                "",
-                font_size=font_size,
-                text_anchor=text_anchor,
-                font_family="Georgia, 'Times New Roman', Times, serif",
-            )
-            text_path = dwg.textPath(f"#{path_id}", line, startOffset=start_offset)
-            text.add(text_path)
-            dwg.add(text)
+                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
+                    create_text_path(dwg, text_path, path_id)
+                    create_text(dwg, font_size, "middle", path_id, line, "50%")
 
 
 def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
@@ -512,7 +486,7 @@ end_child = (center[0] + (box_width + gap) / 2, center[1] + 55)
 
 draw_marriage_line(dwg, start, end, wedd_data[0][0], font_size="14px")
 
-path_d += f"M {(start[0]+end[0])/2},{end[1]+20}"
+path_d = f"M {(start[0]+end[0])/2},{end[1]+20}"
 path_d += f"L {(start[0]+end[0])/2},{center[1] + 55}"
 path_d += f"M {start_child[0]},{start_child[1]+10}"
 path_d += f"L {start_child[0]},{start_child[1]}"
