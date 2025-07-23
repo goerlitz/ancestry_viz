@@ -410,7 +410,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
     child_count = segments_per_ring[child_idx]
     parent_angle_span = segment_angles[parent_idx]
     child_angle_span = segment_angles[child_idx]
-    arc_radius = ring_radii[parent_idx] - ring_gap / 2
+    arc_radius = ring_radii[parent_idx] - ring_gap * 0.6
 
     for i in range(child_count):
         child_center_angle = start_angle_offset + (i + 0.5) * child_angle_span
@@ -431,7 +431,16 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
             ring_radii[parent_idx] - ring_gap + 4, child_center_angle
         )
 
-        wedding = wedd_data[child_idx + 1][i]
+        # Split wedding date and place
+        parts = wedd_data[child_idx + 1][i].split(":", 2)
+        wedding = parts[0] if len(parts) > 0 else ""
+        place = parts[1] if len(parts) > 1 else ""
+        notes = parts[2] if len(parts) > 2 else ""
+
+        # Split notes into parts
+        parts = notes.split("/")
+        note_male = parts[0] if len(parts) > 0 else ""
+        note_female = parts[1] if len(parts) > 1 else ""
 
         path_d = f"M {start[0]},{start[1]}"
         path_d += f"L {arc_start[0]},{arc_start[1]}"
@@ -444,32 +453,46 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         dwg.add(arc_path)
 
         # invisible arc for text path
-        text_arc_start = polar_to_cartesian(
-            arc_radius + 6, child_center_angle - parent_angle_span / 2
+        path_d = create_arc_path(
+            arc_radius + 18,
+            child_center_angle - parent_angle_span / 2,
+            child_center_angle + parent_angle_span / 2,
+            gap_size=0,
         )
-        text_arc_end = polar_to_cartesian(
-            arc_radius + 6, child_center_angle + parent_angle_span / 2
-        )
+        path_id = f"path_ring{child_idx}_mar_date{i}"
+        create_text_path(dwg, path_d, path_id)
+        create_text(dwg, "11px", "middle", path_id, wedding, "50%")
 
-        path_d = f"M {text_arc_start[0]},{text_arc_start[1]}"
-        path_d += (
-            f"A {arc_radius},{arc_radius} 0 0,1 {text_arc_end[0]},{text_arc_end[1]}"
+        path_d = create_arc_path(
+            arc_radius + 6,
+            child_center_angle - parent_angle_span / 2,
+            child_center_angle + parent_angle_span / 2,
+            gap_size=0,
         )
-        path_id = f"path_w{child_idx}_s{i}"
-        arc_path = dwg.path(
-            d=path_d, fill="none", stroke="none", stroke_width=1, id=path_id
-        )
-        dwg.add(arc_path)
+        path_id = f"path_ring{child_idx}_mar_place{i}"
+        create_text_path(dwg, path_d, path_id)
+        create_text(dwg, "11px", "middle", path_id, place, "50%")
 
-        text = dwg.text(
-            "",
-            font_size="12px",
-            text_anchor="middle",
-            font_family="Georgia, 'Times New Roman', Times, serif",
-        )
-        text_path = dwg.textPath(f"#{path_id}", wedding, startOffset="50%")
-        text.add(text_path)
-        dwg.add(text)
+        if note_male:
+            path_d = create_arc_path(
+                arc_radius + 18,
+                child_center_angle - parent_angle_span,
+                child_center_angle - parent_angle_span / 2,
+                gap_size=4,
+            )
+            path_id = f"path_ring{child_idx}_mar_note_male{i}"
+            create_text_path(dwg, path_d, path_id)
+            create_text(dwg, "11px", "end", path_id, note_male, "95%")
+        if note_female:
+            path_d = create_arc_path(
+                arc_radius + 18,
+                child_center_angle + parent_angle_span / 2,
+                child_center_angle + parent_angle_span,
+                gap_size=4,
+            )
+            path_id = f"path_ring{child_idx}_mar_note_female{i}"
+            create_text_path(dwg, path_d, path_id)
+            create_text(dwg, "11px", "start", path_id, note_female, "5%")
 
 
 def draw_marriage_line(dwg, start, end, date_text="", font_size="12px"):
