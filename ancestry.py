@@ -26,7 +26,7 @@ segment_angles = [total_angle / i for i in segments_per_ring]  # 200/2, 200/4, .
 start_radius = 40
 ring_gap = 56
 ring_thickness = 64  # total = 120
-ring_thickness_outer = 130
+ring_thickness_outer = 140
 ring_radii = [
     start_radius
     + min(i, 3) * ring_thickness
@@ -212,12 +212,18 @@ def create_text_line_paths(
     center_angle = (start_angle + end_angle) / 2
     line_spread = (end_angle - start_angle) / 5
 
+    angle_adjust = (4 / start_radius) * (
+        180 / math.pi
+    )  # because text baseline sits on path
+
     # Flip text for left half (upright)
     flip = 90 < (center_angle % 360) < 270
 
+    center_angle = center_angle - (angle_adjust if flip else -angle_adjust)
+
     # Calculate angles for 3 lines
     line_angles = [
-        center_angle - line_spread,
+        center_angle - line_spread + (angle_adjust if flip else -angle_adjust),
         center_angle,
         center_angle + line_spread,
     ]
@@ -231,6 +237,7 @@ def create_text_line_paths(
         start = start_radius + gap_size
         end = end_radius - gap_size
         angles = line_angles
+
     return [
         (
             create_line_path(start, end, angle)
@@ -363,6 +370,8 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
             text_path = text_paths[k]
             if ring_no == 0:
                 font_size = "15px" if k == 0 else "13px"
+            elif ring_no == 1:
+                font_size = "14px" if k == 0 else "12px"
             else:
                 font_size = "13px" if k == 0 else "11px"
 
