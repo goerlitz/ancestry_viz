@@ -454,7 +454,7 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
 
         # invisible arc for text path
         path_d = create_arc_path(
-            arc_radius + 18,
+            arc_radius + 20,
             child_center_angle - parent_angle_span / 2,
             child_center_angle + parent_angle_span / 2,
             gap_size=0,
@@ -475,20 +475,24 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
 
         if note_male:
             path_d = create_arc_path(
-                arc_radius + 18,
+                arc_radius + 20,
                 child_center_angle - parent_angle_span,
                 child_center_angle - parent_angle_span / 2,
-                gap_size=4,
+                gap_size=2,
+                gap_left=False,
+                gap_right=True,
             )
             path_id = f"path_ring{child_idx}_mar_note_male{i}"
             create_text_path(dwg, path_d, path_id)
             create_text(dwg, "11px", "end", path_id, note_male, "95%")
         if note_female:
             path_d = create_arc_path(
-                arc_radius + 18,
+                arc_radius + 20,
                 child_center_angle + parent_angle_span / 2,
                 child_center_angle + parent_angle_span,
-                gap_size=4,
+                gap_size=2,
+                gap_left=True,
+                gap_right=False,
             )
             path_id = f"path_ring{child_idx}_mar_note_female{i}"
             create_text_path(dwg, path_d, path_id)
