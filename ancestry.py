@@ -297,14 +297,47 @@ def create_text_path(dwg, path_d, path_id):
     dwg.add(path)
 
 
-def create_text(dwg, font_size, text_anchor, path_id, line, start_offset):
+def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, bold=False):
+
     text = dwg.text(
         "",
         font_size=font_size,
         text_anchor=text_anchor,
         font_family="Georgia, 'Times New Roman', Times, serif",
     )
-    text_path = dwg.textPath(f"#{path_id}", line, startOffset=start_offset)
+
+    weight = "bold" if bold else "normal"
+    # Check if line contains single quotes -> underline
+    if "'" in line:
+
+        # Create the textPath element that follows the curve
+        text_path = dwg.textPath(f"#{path_id}", "", startOffset=start_offset)
+
+        for word in line.split():
+            weight = (
+                "bold"
+                if bold and word == line.split()[-1] and word.startswith("'")
+                else "normal"
+            )
+            if word.startswith("'") and word.endswith("'"):
+                text_path.add(
+                    dwg.tspan(
+                        word[1:-1], text_decoration="underline", font_weight=weight
+                    )
+                )
+            else:
+                text_path.add(
+                    dwg.tspan(word, text_decoration="none", font_weight=weight)
+                )
+            # Add non breakable space after each word except the last one
+            if word != line.split()[-1]:
+                text_path.add(dwg.tspan("\xa0"))
+
+    else:
+        text_path = dwg.textPath(
+            f"#{path_id}", line, startOffset=start_offset, font_weight=weight
+        )
+
     text.add(text_path)
     dwg.add(text)
 
