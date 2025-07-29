@@ -2,10 +2,12 @@ import base64
 import csv
 import math
 import os
+import re
 import svgwrite
+from svgwrite import gradients
 from dataclasses import dataclass
 from typing import List, Tuple
-from svgwrite import gradients
+from PIL import ImageFont
 
 
 @dataclass
@@ -28,7 +30,7 @@ segment_angles = [total_angle / i for i in segments_per_ring]  # 200/2, 200/4, .
 start_radius = 40
 ring_gap = 56
 ring_thickness = 64  # total = 120
-ring_thickness_outer = 140
+ring_thickness_outer = 144
 ring_radii = [
     start_radius
     + min(i, 3) * ring_thickness
@@ -56,9 +58,10 @@ color_families = {
     "Magenta": ["#e3a7c6", "#f7dbef"],
 }
 
+font_path = "/System/Library/Fonts/Supplemental/Georgia.ttf"
+
 
 def get_font_base64():
-    font_path = "/System/Library/Fonts/Supplemental/Georgia.ttf"
     if not os.path.isfile(font_path):
         raise FileNotFoundError(
             "Georgia.ttf not found at the default macOS location. "
@@ -324,6 +327,44 @@ def create_text_path(dwg, path_d, path_id):
     dwg.add(path)
 
 
+def underline_quoted_text_arc(dwg, line, font_size, radius, center_angle):
+    # get length of text
+    font = ImageFont.truetype(font_path, int(font_size.rstrip("'pxptem%")))
+    text_width = font.getlength(line.replace("'", ""))
+
+    # TODO: fix bug with wrong line end because of first quote
+    # get locations of quotes and translate to angles from center
+    positions = [m.start() for m in re.finditer("'", line)]
+    widths = [font.getlength(line[0:pos].replace("'", "")) for pos in positions]
+    angles = [calculate_gap_angle(w - text_width / 2, radius) for w in widths]
+
+    path_d = create_arc_path(
+        radius,
+        center_angle + angles[0],
+        center_angle + angles[1],
+        gap_size=0,
+    )
+
+    arc_path = dwg.path(d=path_d, fill="none", stroke="black", stroke_width=1.2)
+    dwg.add(arc_path)
+
+
+def underline_quoted_text_line(dwg, line, font_size, center_radius, angle):
+    # get length of text
+    font = ImageFont.truetype(font_path, int(font_size.rstrip("'pxptem%")))
+    text_width = font.getlength(line.replace("'", ""))
+
+    # get locations of quotes and translate to angles from center
+    positions = [m.start() for m in re.finditer("'", line)]
+    widths = [font.getlength(line[0:pos].replace("'", "")) for pos in positions]
+    radii = [center_radius - (w - text_width / 2) for w in widths]
+
+    path_d = create_line_path(radii[0], radii[1], angle)
+
+    arc_path = dwg.path(d=path_d, fill="none", stroke="black", stroke_width=1.2)
+    dwg.add(arc_path)
+
+
 def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, bold=False):
 
     text = dwg.text(
@@ -333,37 +374,9 @@ def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, bold=F
         font_family="Georgia, 'Times New Roman', Times, serif",
     )
 
-    weight = "bold" if bold else "normal"
-    # Check if line contains single quotes -> underline
-    if "'" in line:
-
-        # Create the textPath element that follows the curve
-        text_path = dwg.textPath(f"#{path_id}", "", startOffset=start_offset)
-
-        for word in line.split():
-            weight = (
-                "bold"
-                if bold and word == line.split()[-1] and word.startswith("'")
-                else "normal"
-            )
-            if word.startswith("'") and word.endswith("'"):
-                text_path.add(
-                    dwg.tspan(
-                        word[1:-1], text_decoration="underline", font_weight=weight
-                    )
-                )
-            else:
-                text_path.add(
-                    dwg.tspan(word, text_decoration="none", font_weight=weight)
-                )
-            # Add non breakable space after each word except the last one
-            if word != line.split()[-1]:
-                text_path.add(dwg.tspan("\xa0"))
-
-    else:
-        text_path = dwg.textPath(
-            f"#{path_id}", line, startOffset=start_offset, font_weight=weight
-        )
+    text_path = dwg.textPath(
+        f"#{path_id}", line.replace("'", ""), startOffset=start_offset
+    )
 
     text.add(text_path)
     dwg.add(text)
@@ -374,9 +387,8 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
     zip(ring_radii, segments_per_ring, segment_angles)
 ):
     for seg_no in range(segments):
-        segment_angle = seg_no * angle_span + start_angle_offset
-        start_angle = segment_angle
-        end_angle = segment_angle + angle_span
+        start_angle = seg_no * angle_span + start_angle_offset
+        end_angle = start_angle + angle_span
 
         # Get person data for this segment
         person = ring_data[ring_no][seg_no]
@@ -439,6 +451,25 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                 path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
                 create_text_path(dwg, text_path, path_id)
                 create_text(dwg, font_size, "middle", path_id, line, "50%")
+
+                # underline quoted names
+                if "'" in line:
+                    if ring_no < 3:
+                        underline_quoted_text_arc(
+                            dwg,
+                            line,
+                            font_size,
+                            (inner_radius + outer_radius) / 2 + 11,
+                            (start_angle + end_angle) / 2,
+                        )
+                    else:
+                        underline_quoted_text_line(
+                            dwg,
+                            line,
+                            font_size,
+                            (inner_radius + outer_radius) / 2,
+                            (start_angle + end_angle) / 2 + 1.7,
+                        )
 
             else:
 
