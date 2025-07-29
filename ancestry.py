@@ -1,6 +1,8 @@
-import svgwrite
-import math
+import base64
 import csv
+import math
+import os
+import svgwrite
 from dataclasses import dataclass
 from typing import List, Tuple
 from svgwrite import gradients
@@ -53,6 +55,30 @@ color_families = {
     "Orange": ["#f8bd8d", "#ffe7cc"],
     "Magenta": ["#e3a7c6", "#f7dbef"],
 }
+
+
+def get_font_base64():
+    font_path = "/System/Library/Fonts/Supplemental/Georgia.ttf"
+    if not os.path.isfile(font_path):
+        raise FileNotFoundError(
+            "Georgia.ttf not found at the default macOS location. "
+            "Please point font_path to the .ttf file."
+        )
+
+    with open(font_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("ascii")
+
+
+def embed_font(dwg, font_b64):
+    css = f"""
+    @font-face {{
+      font-family: 'GeorgiaEmbed';
+      src: url("data:font/truetype;charset=utf-8;base64,{font_b64}") format('truetype');
+      font-weight: normal;
+      font-style: normal;
+    }}
+    """
+    dwg.defs.add(dwg.style(css))
 
 
 def interpolate_colors_lab(start_hex, end_hex, n):
@@ -187,6 +213,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
 # Create SVG drawing
 dwg = svgwrite.Drawing("./radial_family.svg", size=("1500px", "1500px"))
 # dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
+# embed_font(dwg, get_font_base64())
 
 # Define shiny gold gradient
 linear_gradient = dwg.linearGradient(
