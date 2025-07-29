@@ -211,7 +211,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
 (ring_data, wedd_data, children) = load_people_from_csv("people.csv")
 
 # Create SVG drawing
-dwg = svgwrite.Drawing("./radial_family.svg", size=("1500px", "1500px"))
+dwg = svgwrite.Drawing("./radial_family.svg", size=("1500px", "1000px"))
 # dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
 # embed_font(dwg, get_font_base64())
 
@@ -534,23 +534,60 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
         create_text(dwg, "11px", "middle", path_id, place, "50%")
 
         if note_male:
+
+            # check for marriage info
+            if "I." in note_male:
+                mar_no = note_male.split(" ")[0]
+                note_male = note_male.split(" ")[1]
+
+                path_d = create_arc_path(
+                    arc_radius + 6,
+                    child_center_angle - parent_angle_span,
+                    child_center_angle - parent_angle_span / 2,
+                    gap_size=4,
+                    gap_left=False,
+                    gap_right=True,
+                )
+                path_id = f"path_ring{child_idx}_mar_note_male_no{i}"
+                create_text_path(dwg, path_d, path_id)
+                create_text(dwg, "11px", "end", path_id, mar_no, "95%")
+
             path_d = create_arc_path(
                 arc_radius + 20,
                 child_center_angle - parent_angle_span,
                 child_center_angle - parent_angle_span / 2,
-                gap_size=2,
+                gap_size=4,
                 gap_left=False,
                 gap_right=True,
             )
             path_id = f"path_ring{child_idx}_mar_note_male{i}"
             create_text_path(dwg, path_d, path_id)
             create_text(dwg, "11px", "end", path_id, note_male, "95%")
+
         if note_female:
+
+            # check for marriage info
+            if "I." in note_female:
+                mar_no = note_female.split(" ")[0]
+                note_female = note_female.split(" ")[1]
+
+                path_d = create_arc_path(
+                    arc_radius + 6,
+                    child_center_angle + parent_angle_span / 2,
+                    child_center_angle + parent_angle_span,
+                    gap_size=4,
+                    gap_left=True,
+                    gap_right=False,
+                )
+                path_id = f"path_ring{child_idx}_mar_note_female_no{i}"
+                create_text_path(dwg, path_d, path_id)
+                create_text(dwg, "11px", "start", path_id, mar_no, "5%")
+
             path_d = create_arc_path(
                 arc_radius + 20,
                 child_center_angle + parent_angle_span / 2,
                 child_center_angle + parent_angle_span,
-                gap_size=2,
+                gap_size=4,
                 gap_left=True,
                 gap_right=False,
             )
