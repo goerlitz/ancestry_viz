@@ -16,6 +16,8 @@ class Person:
     name: str
     birthdate: str
     deathdate: str
+    age: str
+    occupation: str
 
 
 male_color = "#4A90E2"
@@ -195,7 +197,9 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                     ring=ring_no,
                     name=row["name"],
                     birthdate=row["birthdate"],
-                    deathdate=row["birthplace"],
+                    deathdate=row["deathdate"],
+                    age=row["age"],
+                    occupation=row["occupation"],
                 )
                 children[ring_no - 10].append(person)
             else:
@@ -203,7 +207,9 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
                     ring=ring_no,
                     name=row["name"],
                     birthdate=row["birthdate"],
-                    deathdate=row["birthplace"],
+                    deathdate=row["deathdate"],
+                    age=row["age"],
+                    occupation=row["occupation"],
                 )
                 people_by_ring[person.ring].append(person)
 
@@ -382,120 +388,6 @@ def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, bold=F
     dwg.add(text)
 
 
-# Draw visible arcs and attach each text line to its own path
-for ring_no, (base_radius, segments, angle_span) in enumerate(
-    zip(ring_radii, segments_per_ring, segment_angles)
-):
-    for seg_no in range(segments):
-        start_angle = seg_no * angle_span + start_angle_offset
-        end_angle = start_angle + angle_span
-
-        # Get person data for this segment
-        person = ring_data[ring_no][seg_no]
-        lines = (
-            [person.name, person.birthdate]
-            if ring_no == 0
-            else [person.name, person.birthdate, person.deathdate]
-        )
-
-        inner_radius = base_radius
-        outer_radius = base_radius + (
-            ring_thickness_outer if ring_no >= 3 else ring_thickness
-        )
-
-        outline_path = create_ring_segment(
-            inner_radius, outer_radius, start_angle, end_angle, gap_size=4
-        )
-
-        # Add the shaded box
-        if ring_no == 0:
-            fill = "url(#gold_gradient)"
-        else:
-            step = 32 // segments_per_ring[ring_no]
-            fill = palette[seg_no * step]
-        stroke = male_color if seg_no % 2 == 0 else female_color
-        box = dwg.path(
-            d=outline_path,
-            fill=fill,
-            stroke=stroke,
-            stroke_width=1.5,
-        )
-        dwg.add(box)
-
-        if ring_no >= 3:  # Only outermost ring - use straight lines (rays)
-            text_paths = create_text_line_paths(
-                start_angle, end_angle, inner_radius, outer_radius, gap_size=4
-            )
-        else:
-            num = 2 if ring_no == 0 else 3
-            text_paths = create_text_arc_paths(
-                start_angle,
-                end_angle,
-                inner_radius,
-                outer_radius,
-                gap_size=6,
-                lines=num,
-            )
-
-        for k, line in enumerate(lines):  # 3 lines per segment
-
-            text_path = text_paths[k]
-            if ring_no == 0:
-                font_size = "15px" if k == 0 else "13px"
-            elif ring_no == 1:
-                font_size = "14px" if k == 0 else "12px"
-            else:
-                font_size = "13px" if k == 0 else "11px"
-
-            if k == 0:
-                path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
-                create_text_path(dwg, text_path, path_id)
-                create_text(dwg, font_size, "middle", path_id, line, "50%")
-
-                # underline quoted names
-                if "'" in line:
-                    if ring_no < 3:
-                        underline_quoted_text_arc(
-                            dwg,
-                            line,
-                            font_size,
-                            (inner_radius + outer_radius) / 2 + 11,
-                            (start_angle + end_angle) / 2,
-                        )
-                    else:
-                        underline_quoted_text_line(
-                            dwg,
-                            line,
-                            font_size,
-                            (inner_radius + outer_radius) / 2,
-                            (start_angle + end_angle) / 2 + 1.7,
-                        )
-
-            else:
-
-                if ring_no > 0 and k > 0:
-                    # Split value into date and place
-                    value = line
-                    if ":" in value:
-                        date_part, place_part = value.split(":", 1)
-                    else:
-                        date_part, place_part = value, ""
-
-                    # Date: right-aligned, left arc
-                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}_date"
-                    create_text_path(dwg, text_path[0], path_id)
-                    create_text(dwg, "11px", "end", path_id, date_part, "96%")
-
-                    # Place: left-aligned, right arc
-                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}_place"
-                    create_text_path(dwg, text_path[1], path_id)
-                    create_text(dwg, "11px", "start", path_id, place_part, "4%")
-                else:
-                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
-                    create_text_path(dwg, text_path, path_id)
-                    create_text(dwg, font_size, "middle", path_id, line, "50%")
-
-
 def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
     parent_count = segments_per_ring[parent_idx]
     child_count = segments_per_ring[child_idx]
@@ -646,6 +538,214 @@ def draw_marriage_line(dwg, start, end, date_text="", font_size="12px"):
         font_family="Georgia, 'Times New Roman', Times, serif",
     )
     dwg.add(wedd_text)
+
+
+def create_pill(radius, angle, direction=0, height: int = 16, width: int = 16):
+    # the pill ends will be two half circles
+    half = height / 2
+    half_angle = calculate_gap_angle(half, radius)
+
+    if direction == 0:
+        pill_angle = calculate_gap_angle(width, radius) + half_angle
+
+        # radius is center, angle is right aligned
+        p1 = polar_to_cartesian(radius + half, angle - pill_angle)
+        p2 = polar_to_cartesian(radius + half, angle - half_angle)
+        p3 = polar_to_cartesian(radius - half, angle - half_angle)
+        p4 = polar_to_cartesian(radius - half, angle - pill_angle)
+    elif direction == -1:
+        center_radius = 4 + radius - half - width / 2
+
+        add_angle = -2 * half_angle * direction
+        p1 = polar_to_cartesian(center_radius + half, angle)
+        p2 = polar_to_cartesian(center_radius - half, angle)
+        p3 = polar_to_cartesian(center_radius - half, angle - add_angle)
+        p4 = polar_to_cartesian(center_radius + half, angle - add_angle)
+    else:
+        center_radius = 4 + radius - half - width / 2
+
+        add_angle = -2 * half_angle * direction
+        p1 = polar_to_cartesian(center_radius - half, angle)
+        p2 = polar_to_cartesian(center_radius + half, angle)
+        p3 = polar_to_cartesian(center_radius + half, angle - add_angle)
+        p4 = polar_to_cartesian(center_radius - half, angle - add_angle)
+
+    # Create pill path: p1 -> p2 -> arc to p3 -> p4 -> arc to p1
+    pill_path = f"M {p1[0]},{p1[1]} L {p2[0]},{p2[1]} "
+    pill_path += f"A {half},{half} 0 0,1 {p3[0]},{p3[1]} "
+    pill_path += f"L {p4[0]},{p4[1]} "
+    pill_path += f"A {half},{half} 0 0,1 {p1[0]},{p1[1]} Z"
+
+    return pill_path
+
+
+def create_pill_text(
+    dwg, text, radius, angle, direction=0, height: int = 16, width: int = 16
+):
+    half = height / 2
+    half_angle = calculate_gap_angle(half, radius)
+
+    if direction == 0:
+        pill_angle = calculate_gap_angle(width, radius) + half_angle
+        center_angle = angle - (pill_angle + half_angle) / 2
+        text_x, text_y = polar_to_cartesian(radius, center_angle)
+    elif direction == -1:
+        center_angle = angle - half_angle
+        text_x, text_y = polar_to_cartesian(6 + radius - half - width / 2, center_angle)
+    else:
+        center_angle = angle + half_angle
+        text_x, text_y = polar_to_cartesian(6 + radius - half - width / 2, center_angle)
+
+    pill_text = dwg.text(
+        text,
+        insert=(text_x, text_y),
+        text_anchor="middle",
+        dominant_baseline="middle",
+        font_size="10px",
+        font_family="Georgia, 'Times New Roman', Times, serif",
+        fill="black",
+    )
+
+    # Apply rotation transform
+    add_angle = 90 if direction == 0 else (180 if direction == -1 else 0)
+    pill_text.rotate(center_angle + add_angle, center=(text_x, text_y))
+    dwg.add(pill_text)
+
+
+# -------------
+
+
+# Draw visible arcs and attach each text line to its own path
+for ring_no, (base_radius, segments, angle_span) in enumerate(
+    zip(ring_radii, segments_per_ring, segment_angles)
+):
+    for seg_no in range(segments):
+        start_angle = seg_no * angle_span + start_angle_offset
+        end_angle = start_angle + angle_span
+
+        # Get person data for this segment
+        person = ring_data[ring_no][seg_no]
+        lines = (
+            [person.name, person.birthdate]
+            if ring_no == 0
+            else [person.name, person.birthdate, person.deathdate]
+        )
+
+        inner_radius = base_radius
+        outer_radius = base_radius + (
+            ring_thickness_outer if ring_no >= 3 else ring_thickness
+        )
+
+        outline_path = create_ring_segment(
+            inner_radius, outer_radius, start_angle, end_angle, gap_size=4
+        )
+
+        # Add the shaded box
+        if ring_no == 0:
+            fill = "url(#gold_gradient)"
+        else:
+            step = 32 // segments_per_ring[ring_no]
+            fill = palette[seg_no * step]
+        stroke = male_color if seg_no % 2 == 0 else female_color
+        box = dwg.path(
+            d=outline_path,
+            fill=fill,
+            stroke=stroke,
+            stroke_width=1.5,
+        )
+        dwg.add(box)
+
+        if ring_no >= 3:  # Only outermost ring - use straight lines (rays)
+            text_paths = create_text_line_paths(
+                start_angle, end_angle, inner_radius, outer_radius, gap_size=4
+            )
+        else:
+            num = 2 if ring_no == 0 else 3
+            text_paths = create_text_arc_paths(
+                start_angle,
+                end_angle,
+                inner_radius,
+                outer_radius,
+                gap_size=6,
+                lines=num,
+            )
+
+        for k, line in enumerate(lines):  # 3 lines per segment
+
+            text_path = text_paths[k]
+            if ring_no == 0:
+                font_size = "15px" if k == 0 else "13px"
+            elif ring_no == 1:
+                font_size = "14px" if k == 0 else "12px"
+            else:
+                font_size = "13px" if k == 0 else "11px"
+
+            if k == 0:
+                path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
+                create_text_path(dwg, text_path, path_id)
+                create_text(dwg, font_size, "middle", path_id, line, "50%")
+
+                # underline quoted names
+                if "'" in line:
+                    if ring_no < 3:
+                        underline_quoted_text_arc(
+                            dwg,
+                            line,
+                            font_size,
+                            (inner_radius + outer_radius) / 2 + 10,
+                            (start_angle + end_angle) / 2,
+                        )
+                    else:
+                        underline_quoted_text_line(
+                            dwg,
+                            line,
+                            font_size,
+                            (inner_radius + outer_radius) / 2,
+                            (start_angle + end_angle) / 2 + 1.7,
+                        )
+
+            else:
+
+                if ring_no > 0 and k > 0:
+                    # Split value into date and place
+                    value = line
+                    if ":" in value:
+                        date_part, place_part = value.split(":", 1)
+                    else:
+                        date_part, place_part = value, ""
+
+                    # Date: right-aligned, left arc
+                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}_date"
+                    create_text_path(dwg, text_path[0], path_id)
+                    create_text(dwg, "11px", "end", path_id, date_part, "96%")
+
+                    # Place: left-aligned, right arc
+                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}_place"
+                    create_text_path(dwg, text_path[1], path_id)
+                    create_text(dwg, "11px", "start", path_id, place_part, "4%")
+                else:
+                    path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
+                    create_text_path(dwg, text_path, path_id)
+                    create_text(dwg, font_size, "middle", path_id, line, "50%")
+
+        if person.age:
+            if ring_no >= 3:
+                angle = end_angle if end_angle <= 270 else start_angle
+                direction = -1 if end_angle <= 270 else 1
+
+                p = create_pill(outer_radius, angle, direction=direction)
+                polygon = dwg.path(d=p, fill=fill, stroke=stroke)
+                dwg.add(polygon)
+
+                create_pill_text(
+                    dwg, person.age, outer_radius - 2, angle, direction=direction
+                )
+            else:
+                p = create_pill(outer_radius - 2, end_angle)
+                polygon = dwg.path(d=p, fill=fill, stroke=stroke)
+                dwg.add(polygon)
+
+                create_pill_text(dwg, person.age, outer_radius - 2, end_angle)
 
 
 draw_parent_child_arcs(0, 1, dwg)
