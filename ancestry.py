@@ -49,7 +49,7 @@ ring_radii = [
 start_angle_offset = 170
 line_spacing = 16  # spacing between text lines
 box_width = 120
-box_height = 50
+box_height = 60
 gap = 8
 
 # import matplotlib.pyplot as plt
@@ -190,7 +190,7 @@ def create_ring_segment(
 # Load people data from CSV file
 def load_people_from_csv(filename: str) -> List[List[Person]]:
     people_by_ring = [[] for _ in range(num_rings)]
-    weddings_by_ring = [[] for _ in range(num_rings)]
+    weddings_by_ring = [[] for _ in range(num_rings + 1)]
     children = [[] for _ in range(2)]
 
     with open(filename, "r", newline="", encoding="utf-8") as f:
@@ -330,7 +330,7 @@ def create_text_arc_paths(
     """Create an SVG arc paths for text."""
     center_angle = (start_angle + end_angle) / 2
     line_spread = (end_radius - start_radius) / (lines + 1)
-    radii = [end_radius - (i + 1.2) * line_spread for i in range(lines)]
+    radii = [end_radius - (i + 1.3) * line_spread for i in range(lines)]
 
     # first line is full arc, rest are split into two arcs
     return [
@@ -553,23 +553,36 @@ def draw_parent_child_arcs(child_idx: int, parent_idx: int, dwg):
 
 def draw_marriage_line(dwg, start, end, date_text="", font_size="12px"):
     path_d = f"M {start[0]},{start[1]}"
-    path_d += f"L {start[0]},{start[1]+20}"
-    path_d += f"L {end[0]},{end[1]+20}"
+    path_d += f"L {start[0]},{start[1]+30}"
+    path_d += f"L {end[0]},{end[1]+30}"
     path_d += f"L {end[0]},{end[1]}"
 
     line = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
     dwg.add(line)
 
-    # Save SVG
-    # Add centered text 'hello' under the center point
+    if ":" in date_text:
+        (mdate, place) = date_text.split(":")
+    else:
+        (mdate, place) = date_text, None
+
     wedd_text = dwg.text(
-        date_text,
-        insert=((start[0] + end[0]) / 2, end[1] + 14),
+        mdate,
+        insert=((start[0] + end[0]) / 2, end[1] + 8),
         text_anchor="middle",
         font_size=font_size,
         font_family=text_font,
     )
     dwg.add(wedd_text)
+
+    if place:
+        wedd_place = dwg.text(
+            place,
+            insert=((start[0] + end[0]) / 2, end[1] + 24),
+            text_anchor="middle",
+            font_size=font_size,
+            font_family=text_font,
+        )
+        dwg.add(wedd_place)
 
 
 def create_pill(radius, angle, direction=0, height: int = 16, width: int = 16):
@@ -657,11 +670,7 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
         # Get person data for this segment
         person = ring_data[ring_no][seg_no]
-        lines = (
-            [person.name, person.birthdate]
-            if ring_no == 0
-            else [person.name, person.birthdate, person.deathdate]
-        )
+        lines = [person.name, person.birthdate, person.deathdate]
 
         inner_radius = base_radius
         outer_radius = base_radius + (
@@ -692,21 +701,20 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                 start_angle, end_angle, inner_radius, outer_radius, gap_size=4
             )
         else:
-            num = 2 if ring_no == 0 else 3
             text_paths = create_text_arc_paths(
                 start_angle,
                 end_angle,
                 inner_radius,
                 outer_radius,
                 gap_size=6,
-                lines=num,
+                lines=3,
             )
 
         for k, line in enumerate(lines):  # 3 lines per segment
 
             text_path = text_paths[k]
             if ring_no == 0:
-                font_size = "15px" if k == 0 else "13px"
+                font_size = "15px" if k == 0 else "12px"
             elif ring_no == 1:
                 font_size = "14px" if k == 0 else "12px"
             else:
@@ -738,13 +746,12 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
 
             else:
 
-                if ring_no > 0 and k > 0:
+                if ring_no > 0:
                     # Split value into date and place
-                    value = line
-                    if ":" in value:
-                        date_part, place_part = value.split(":", 1)
+                    if ":" in line:
+                        date_part, place_part = line.split(":", 1)
                     else:
-                        date_part, place_part = value, ""
+                        date_part, place_part = line, ""
 
                     # Date: right-aligned, left arc
                     path_id = f"path_r{ring_no}_s{seg_no}_l{k}_date"
@@ -792,7 +799,8 @@ end_child = (center[0] + (box_width + gap) / 2, center[1] + 55)
 
 draw_marriage_line(dwg, start, end, wedd_data[0][0], font_size="14px")
 
-path_d = f"M {(start[0]+end[0])/2},{end[1]+20}"
+## draw more connections
+path_d = f"M {(start[0]+end[0])/2},{end[1]+30}"
 path_d += f"L {(start[0]+end[0])/2},{center[1] + 55}"
 path_d += f"M {start_child[0]},{start_child[1]+10}"
 path_d += f"L {start_child[0]},{start_child[1]}"
@@ -802,23 +810,42 @@ connect = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
 dwg.add(connect)
 
 x_offset = 0.5 * (box_width + gap)
-y_offset = center[1] + 124
+y_offset = center[1] + 134
 draw_marriage_line(
     dwg,
     (center[0] - 3 * x_offset, y_offset),
     (center[0] - x_offset, y_offset),
 )
+path_d = f"M {(center[0] - 2 * x_offset)},{y_offset+30}"
+path_d += f"L {(center[0] - 2 * x_offset)},{y_offset+48}"
+child1 = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
+dwg.add(child1)
+
 draw_marriage_line(
     dwg,
     (center[0] + x_offset, y_offset),
     (center[0] + 3 * x_offset, y_offset),
-    "⚭ 14.7.2011",
+    wedd_data[5][1],
 )
+path_d = f"M {(center[0] + 2 * x_offset)},{y_offset+30}"
+path_d += f"L {(center[0] + 2 * x_offset)},{y_offset+40}"
+path_d += f"M {(center[0] + x_offset)},{y_offset+48}"
+path_d += f"L {(center[0] + x_offset)},{y_offset+40}"
+path_d += f"L {(center[0] + 3 * x_offset)},{y_offset+40}"
+path_d += f"L {(center[0] + 3 * x_offset)},{y_offset+48}"
+child2 = dwg.path(d=path_d, fill="none", stroke="lightgrey", stroke_width=1)
+dwg.add(child2)
 
 
 def draw_children_boxes(dwg, y_offset):
+
+    # fixed male/female coding
+    male = [[False, True, True, False], [True, True, True, False]]
+
     for line_no in range(len(children)):
         for i, child in enumerate(children[line_no]):
+
+            is_male = male[line_no][i]
 
             # skip empty children
             if not child.name:
@@ -840,8 +867,8 @@ def draw_children_boxes(dwg, y_offset):
             child_box = dwg.rect(
                 insert=(x - box_width / 2, y),
                 size=(box_width, box_height),
-                fill="#f0f0f0",
-                stroke="lightgray",
+                fill="#ede7fa" if i < 2 else "#e7f0fa",
+                stroke=male_color if is_male else female_color,
                 stroke_width=1,
             )
             dwg.add(child_box)
@@ -850,13 +877,13 @@ def draw_children_boxes(dwg, y_offset):
             lines = [child.name, child.birthdate, child.deathdate]
             for k, line in enumerate(lines):
                 line_y = (
-                    y + (k + 1.3) * line_spacing
+                    y + (k + 1.2) * line_spacing
                 )  # Use same line_spacing as segments
                 child_text = dwg.text(
                     line,
                     insert=(x, line_y),
                     text_anchor="middle",
-                    font_size="13px",
+                    font_size="13px" if k == 0 else "11px",
                     font_family=text_font,
                 )
                 dwg.add(child_text)
