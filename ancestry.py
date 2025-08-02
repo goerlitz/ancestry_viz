@@ -20,11 +20,17 @@ class Person:
     occupation: str
 
 
+title_font = "Apple Chancery, cursive"
+title_font = "SnellRoundhand"
+subtitle_font = "SnellRoundhand"
+# text_font="Apple Chancery, cursive"
+text_font = "Georgia, 'Times New Roman', Times, serif"
+
 male_color = "#4A90E2"
 female_color = "#FF6EC7"
 
 # Parameters
-center = (750, 750)
+center = (800, 920)
 num_rings = 5
 segments_per_ring = [2, 4, 8, 16, 32]
 total_angle = 200.0
@@ -60,30 +66,31 @@ color_families = {
     "Magenta": ["#e3a7c6", "#f7dbef"],
 }
 
-font_path = "/System/Library/Fonts/Supplemental/Georgia.ttf"
+font_name = text_font.split(",")[0]
+font_path = f"/System/Library/Fonts/Supplemental/{font_name}.ttf"
 
 
-def get_font_base64():
-    if not os.path.isfile(font_path):
-        raise FileNotFoundError(
-            "Georgia.ttf not found at the default macOS location. "
-            "Please point font_path to the .ttf file."
-        )
+# def get_font_base64():
+#     if not os.path.isfile(font_path):
+#         raise FileNotFoundError(
+#             "Georgia.ttf not found at the default macOS location. "
+#             "Please point font_path to the .ttf file."
+#         )
 
-    with open(font_path, "rb") as f:
-        return base64.b64encode(f.read()).decode("ascii")
+#     with open(font_path, "rb") as f:
+#         return base64.b64encode(f.read()).decode("ascii")
 
 
-def embed_font(dwg, font_b64):
-    css = f"""
-    @font-face {{
-      font-family: 'GeorgiaEmbed';
-      src: url("data:font/truetype;charset=utf-8;base64,{font_b64}") format('truetype');
-      font-weight: normal;
-      font-style: normal;
-    }}
-    """
-    dwg.defs.add(dwg.style(css))
+# def embed_font(dwg, font_b64):
+#     css = f"""
+#     @font-face {{
+#       font-family: 'GeorgiaEmbed';
+#       src: url("data:font/truetype;charset=utf-8;base64,{font_b64}") format('truetype');
+#       font-weight: normal;
+#       font-style: normal;
+#     }}
+#     """
+#     dwg.defs.add(dwg.style(css))
 
 
 def interpolate_colors_lab(start_hex, end_hex, n):
@@ -220,9 +227,34 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
 (ring_data, wedd_data, children) = load_people_from_csv("people.csv")
 
 # Create SVG drawing
-dwg = svgwrite.Drawing("./radial_family.svg", size=("1500px", "1000px"))
+dwg = svgwrite.Drawing("./radial_family.svg", size=("1600px", "1200px"))
 # dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
 # embed_font(dwg, get_font_base64())
+
+
+title_font = "Apple Chancery, cursive"
+
+title = dwg.text(
+    "Stammbaum",
+    insert=(center[0], 70),
+    text_anchor="middle",
+    font_size="72px",
+    font_family=title_font,
+    fill="#2c3e50",
+    # font_weight="bold"
+)
+dwg.add(title)
+
+title = dwg.text(
+    "der Familie Görlitz",
+    insert=(center[0], 120),
+    text_anchor="middle",
+    font_size="36px",
+    font_family=subtitle_font,
+    fill="#2c3e50",
+    # font_weight="bold"
+)
+dwg.add(title)
 
 # Define shiny gold gradient
 linear_gradient = dwg.linearGradient(
@@ -377,7 +409,7 @@ def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, bold=F
         "",
         font_size=font_size,
         text_anchor=text_anchor,
-        font_family="Georgia, 'Times New Roman', Times, serif",
+        font_family=text_font,
     )
 
     text_path = dwg.textPath(
@@ -535,7 +567,7 @@ def draw_marriage_line(dwg, start, end, date_text="", font_size="12px"):
         insert=((start[0] + end[0]) / 2, end[1] + 14),
         text_anchor="middle",
         font_size=font_size,
-        font_family="Georgia, 'Times New Roman', Times, serif",
+        font_family=text_font,
     )
     dwg.add(wedd_text)
 
@@ -602,7 +634,7 @@ def create_pill_text(
         text_anchor="middle",
         dominant_baseline="middle",
         font_size="10px",
-        font_family="Georgia, 'Times New Roman', Times, serif",
+        font_family=text_font,
         fill="black",
     )
 
@@ -825,7 +857,7 @@ def draw_children_boxes(dwg, y_offset):
                     insert=(x, line_y),
                     text_anchor="middle",
                     font_size="13px",
-                    font_family="Georgia, 'Times New Roman', Times, serif",
+                    font_family=text_font,
                 )
                 dwg.add(child_text)
 
