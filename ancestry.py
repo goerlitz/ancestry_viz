@@ -403,13 +403,13 @@ def underline_quoted_text_line(dwg, line, font_size, center_radius, angle):
     dwg.add(arc_path)
 
 
-def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, bold=False):
+def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, font=text_font, bold=False):
 
     text = dwg.text(
         "",
         font_size=font_size,
         text_anchor=text_anchor,
-        font_family=text_font,
+        font_family=font,
     )
 
     text_path = dwg.textPath(
@@ -890,5 +890,21 @@ def draw_children_boxes(dwg, y_offset):
 
 
 draw_children_boxes(dwg, 70)
+
+# name regions
+path_d = create_arc_path(765, 170, 220)
+path_id = f"path_schlesien"
+create_text_path(dwg, path_d, path_id)
+create_text(dwg, "24px", "middle", path_id, "Niederschlesien", "50%", font=title_font)
+
+path_d = create_arc_path(765, 270, 320)
+path_id = f"path_mecklenburg"
+create_text_path(dwg, path_d, path_id)
+create_text(dwg, "24px", "middle", path_id, "Mecklenburg", "50%", font=title_font)
+
+path_d = create_arc_path(765, 320, 10)
+path_id = f"path_vorpommern"
+create_text_path(dwg, path_d, path_id)
+create_text(dwg, "24px", "middle", path_id, "Vorpommern", "50%", font=title_font)
 
 dwg.save()
