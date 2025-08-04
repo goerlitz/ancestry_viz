@@ -1,5 +1,7 @@
+pandas
 numpy
 matplotlib
 scikit-image
 
+bigtree
 svgwrite
