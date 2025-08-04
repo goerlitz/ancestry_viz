@@ -1,5 +1,7 @@
 import pandas as pd
 import svgwrite
+from babel.dates import format_date
+from datetime import datetime
 from bigtree import Node, reingold_tilford, plot_tree
 
 # Step 1: Load your CSV
@@ -36,6 +38,7 @@ def build_tree(person_id):
         birthdate=row.get("birth_date"),
         deathdate=row.get("death_date"),
         occupation=row.get("occupation"),
+        sex=row.get("sex"),  # Add sex field from CSV
     )
     nodes[person_id] = node
 
@@ -88,20 +91,35 @@ y_coords = [node.y for node in all_nodes if hasattr(node, "y")]
 min_x, max_x = min(x_coords), max(x_coords)
 min_y, max_y = min(y_coords), max(y_coords)
 
-# swap coordinates
+
+def date2str(value: str) -> str:
+    if pd.isnull(value) or value == "":
+        return ""
+
+    try:
+        date_obj = datetime.strptime(value, "%Y-%m-%d")
+        # 'd. MMM y' = e.g., 15. Jan 1880 in German format
+        return format_date(date_obj, format="d. MMM y", locale="de")
+    except ValueError:
+        return str(value)
+
+
+# swap coordinates and prepare dates
 for node in all_nodes:
     x, y = node.x, node.y
     node.x = (max_y - y) * x_unit + x_margin
     node.y = x * y_unit + y_margin
+    node.birthdate = date2str(node.birthdate)
+    node.deathdate = date2str(node.deathdate)
 
 fig = plot_tree(root)
 fig.savefig("quick_tree.png")
 
 # Debug: print coordinate ranges
-print("Coordinate ranges:")
-for node in all_nodes:
-    if hasattr(node, "x") and hasattr(node, "y"):
-        print(f"  {node.name}: x={node.x}, y={node.y}")
+# print("Coordinate ranges:")
+# for node in all_nodes:
+#     if hasattr(node, "x") and hasattr(node, "y"):
+#         print(f"  {node.name}: x={node.x}, y={node.y}")
 
 
 # Create SVG drawing
@@ -125,21 +143,32 @@ for node in all_nodes:
 
 for node in all_nodes:
 
+    # Determine gender from the sex field
+    is_male = hasattr(node, "sex") and node.sex == "m"
+
+    # Color based on gender - light backgrounds with colored borders
+    fill_color = (
+        "#E3F2FD" if is_male else "#FCE4EC"
+    )  # Light blue for male, Light pink for female
+    stroke_color = (
+        "#4A90E2" if is_male else "#FF6EC7"
+    )  # Blue border for male, Pink border for female
+
     # Draw box
     box = dwg.rect(
         insert=(node.x - box_width / 2, node.y - box_height / 2),
         size=(box_width, box_height),
-        fill="#e3f2fd",
-        stroke="#1976d2",
+        fill=fill_color,
+        stroke=stroke_color,
         stroke_width=2,
-        rx=5,  # rounded corners
+        rx=4,  # rounded corners
     )
     dwg.add(box)
 
     # Add name text
     name_text = dwg.text(
         node.name,
-        insert=(node.x, node.y - 12),
+        insert=(node.x, node.y - 14),
         text_anchor="middle",
         dominant_baseline="middle",
         font_size="10px",
@@ -151,10 +180,8 @@ for node in all_nodes:
 
     # Add birth/death info if available
     info_lines = []
-    if hasattr(node, "birthdate") and node.birthdate:
-        info_lines.append(f"* {node.birthdate}")
-    if hasattr(node, "deathdate") and node.deathdate:
-        info_lines.append(f"† {node.deathdate}")
+    info_lines.append(f"* {node.birthdate}")
+    info_lines.append(f"† {node.deathdate}")
 
     if info_lines:
         for k, info in enumerate(info_lines):
