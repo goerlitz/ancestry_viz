@@ -4,18 +4,19 @@ from babel.dates import format_date
 from datetime import datetime
 from bigtree import Node, reingold_tilford, plot_tree
 
-# Step 1: Load your CSV
-df = pd.read_csv("data.csv", sep=";")
+# Load your CSV
+df = pd.read_csv("data.csv", sep=";", dtype=str)
+df = df.where(df.notnull(), None)
 print(f"Loaded {len(df)} records from data.csv")
 
-# Step 2: Detect the root (person with no FatherID or MotherID)
+# Detect the root (person with no FatherID or MotherID)
 potential_roots = df[df["father_id"].isnull() & df["mother_id"].isnull()]
 if potential_roots.empty:
     raise ValueError("No root person found")
 root_id = potential_roots.iloc[0]["id"]
 print(f"Root person ID: {root_id}")
 
-# Step 3: Build a tree of Nodes
+# Build a tree of Nodes
 nodes = {}
 
 
@@ -23,57 +24,106 @@ def build_tree(person_id):
     if person_id in nodes:
         return nodes[person_id]
 
-    # Find the person in the dataframe
-    person_data = df[df["id"] == person_id]
-    if person_data.empty:
-        print(f"Warning: Person ID {person_id} not found in data")
-        return None
+    row = df[df["id"] == person_id].iloc[0]
+    name = row.get("name", f"Person_{person_id}")
 
-    row = person_data.iloc[0]
-
-    # Create node with name as the first argument
+    # Create person node
     node = Node(
-        name=row.get("name", f"Person_{person_id}"),
+        name=name,
         person_id=str(person_id),
-        birthdate=row.get("birth_date"),
-        deathdate=row.get("death_date"),
+        birth_date=row.get("birth_date"),
+        death_date=row.get("death_date"),
         occupation=row.get("occupation"),
-        sex=row.get("sex"),  # Add sex field from CSV
+        spouse_id=row.get("spouse_id"),
+        sex=row.get("sex"),
     )
     nodes[person_id] = node
 
-    # Find children
+    # Always insert marriage node above person for layout positioning
+    # (even if person has no spouse
+    marriage_node = Node(name=f"Marriage_{person_id}")
+    nodes[f"marriage_{person_id}"] = marriage_node
+
+    spouse_id = row.get("spouse_id")
+    if pd.notnull(spouse_id):
+        # Ensure spouse node exists
+        if spouse_id not in nodes:
+            spouse_row = df[df["id"] == spouse_id].iloc[0]
+            spouse_name = spouse_row.get("name", f"Person_{spouse_id}")
+            spouse_node = Node(
+                name=spouse_name,
+                person_id=str(spouse_id),
+                birth_date=spouse_row.get("birth_date"),
+                death_date=spouse_row.get("death_date"),
+                occupation=spouse_row.get("occupation"),
+                sex=spouse_row.get("sex"),
+            )
+            nodes[spouse_id] = spouse_node
+        else:
+            spouse_node = nodes[spouse_id]
+        # Attach both person and spouse as children of marriage node (female first)
+        if node.sex == "f":
+            node.parent = marriage_node
+            spouse_node.parent = marriage_node
+        else:
+            spouse_node.parent = marriage_node
+            node.parent = marriage_node
+    else:
+        # Attach only the person as child if no spouse
+        node.parent = marriage_node
+
+    # Attach children to main person ---
     children = df[(df["father_id"] == person_id) | (df["mother_id"] == person_id)]
     for _, child in children.iterrows():
         child_node = build_tree(child["id"])
         if child_node:
             child_node.parent = node
 
-    return node
+    return marriage_node
 
 
 root = build_tree(root_id)
 if not root:
     raise ValueError("Failed to build tree")
 
-print(f"Tree built successfully with root: {root.name}")
-
-# Step 4: Compute layout positions
-reingold_tilford(root)
+# Compute layout positions
 reingold_tilford(
     root,
     sibling_separation=1.0,
-    subtree_separation=1.25,
-    level_separation=1,
+    subtree_separation=1.1,
+    level_separation=0.5,
     x_offset=0.0,
     y_offset=0.0,
     reverse=False,
 )
 
 
+def remove_marriage_nodes(nodes):
+    # First collect all marriage nodes
+    marriage_nodes = [node for node in nodes if str(node.name).startswith("Marriage_")]
+
+    for marriage_node in marriage_nodes:
+        # Move marriage_node's children to its parent
+        parent = marriage_node.parent
+        for child in list(marriage_node.children):
+            child.parent = parent
+        marriage_node.parent = None  # Detach from tree (will be garbage collected)
+
+    # rewire spouses parents
+    spouses = [node for node in nodes if node.get_attr("spouse_id")]
+    for spouse in spouses:
+        spouse_id = spouse.get_attr("spouse_id")
+        others = [node for node in nodes if node.get_attr("person_id") == spouse_id]
+        for other in others:
+            other.parent = spouse
+
+    # return list without marriage nodes
+    return [node for node in all_nodes if not str(node.name).startswith("Marriage_")]
+
+
 # Create SVG with x/y coordinate swap for left-to-right layout
-svg_width = 900
-svg_height = 1200
+svg_width = 1200
+svg_height = 1600
 box_width = 160
 box_height = 60
 box_gap = 10
@@ -84,6 +134,8 @@ y_margin = box_height * 0.7
 
 # Get min and max coordinates of all nodes including root
 all_nodes = [root] + list(root.descendants)
+
+all_nodes = remove_marriage_nodes(all_nodes)
 
 x_coords = [node.x for node in all_nodes if hasattr(node, "x")]
 y_coords = [node.y for node in all_nodes if hasattr(node, "y")]
@@ -109,17 +161,13 @@ for node in all_nodes:
     x, y = node.x, node.y
     node.x = (max_y - y) * x_unit + x_margin
     node.y = x * y_unit + y_margin
-    node.birthdate = date2str(node.birthdate)
-    node.deathdate = date2str(node.deathdate)
+    bd = getattr(node, "birth_date", None)
+    dd = getattr(node, "death_date", None)
+    node.birthdate = date2str(bd) if bd else ""
+    node.deathdate = date2str(dd) if dd else ""
 
 fig = plot_tree(root)
 fig.savefig("quick_tree.png")
-
-# Debug: print coordinate ranges
-# print("Coordinate ranges:")
-# for node in all_nodes:
-#     if hasattr(node, "x") and hasattr(node, "y"):
-#         print(f"  {node.name}: x={node.x}, y={node.y}")
 
 
 # Create SVG drawing
@@ -132,6 +180,21 @@ dwg.add(dwg.rect(insert=(0, 0), size=(svg_width, svg_height), fill="white"))
 for node in all_nodes:
 
     if node.parent:
+
+        # spouse_id = getattr(node, "spouse_id", None)
+        # if spouse_id:
+        # spouses = [
+        #     node
+        #     for node in all_nodes
+        #     if getattr(node, "person_id", None) == spouse_id
+        # ]
+        # line = dwg.line(
+        #     start=(spouses[0].x, spouses[0].y),
+        #     end=(node.x, node.y),
+        #     stroke="lightgray",
+        #     stroke_width=2,
+        # )
+        # else:
         # Draw connection line
         line = dwg.line(
             start=(node.parent.x, node.parent.y),
