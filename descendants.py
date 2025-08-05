@@ -181,28 +181,33 @@ for node in all_nodes:
 
     if node.parent:
 
-        # spouse_id = getattr(node, "spouse_id", None)
-        # if spouse_id:
-        # spouses = [
-        #     node
-        #     for node in all_nodes
-        #     if getattr(node, "person_id", None) == spouse_id
-        # ]
-        # line = dwg.line(
-        #     start=(spouses[0].x, spouses[0].y),
-        #     end=(node.x, node.y),
-        #     stroke="lightgray",
-        #     stroke_width=2,
-        # )
-        # else:
-        # Draw connection line
-        line = dwg.line(
-            start=(node.parent.x, node.parent.y),
-            end=(node.x, node.y),
-            stroke="lightgray",
-            stroke_width=2,
-        )
-        dwg.add(line)
+        # check if parent is spouse
+        # node_id = node.get_attr("person_id")
+        # parent_spouse_id = node.parent.get_attr("spouse_id")
+        if node.parent.get_attr("spouse_id") == node.get_attr("person_id"):
+            x = node.x + box_width / 2 + 4
+            y1 = node.y
+            y2 = node.parent.y
+            d = f"M {x},{y1} L {x+10},{y1} L {x+10},{y2} L {x},{y2}"
+            dwg.add(dwg.path(d=d, stroke="lightgray", fill="none", stroke_width=2))
+
+        else:
+            parent_spouse_id = node.parent.get_attr("spouse_id")
+            parent_spouse = [
+                node
+                for node in all_nodes
+                if node.get_attr("person_id") == parent_spouse_id
+            ]
+            px = node.parent.x + box_width / 2 + 14
+            py1 = node.parent.y
+            py2 = parent_spouse[0].y
+            py_mid = (py1 + py2) / 2
+            cx = node.x - box_width / 2 - 4
+            cy = node.y
+            x_mid = (px + cx) / 2
+            # Draw connection line
+            d = f"M {px},{py_mid} L {x_mid},{py_mid} L {x_mid},{cy} L {cx},{cy}"
+            dwg.add(dwg.path(d=d, stroke="lightgray", fill="none", stroke_width=2))
 
 for node in all_nodes:
 
@@ -223,7 +228,7 @@ for node in all_nodes:
         size=(box_width, box_height),
         fill=fill_color,
         stroke=stroke_color,
-        stroke_width=2,
+        stroke_width=1.5,
         rx=4,  # rounded corners
     )
     dwg.add(box)
