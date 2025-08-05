@@ -33,6 +33,8 @@ def build_tree(person_id):
         person_id=str(person_id),
         birth_date=row.get("birth_date"),
         death_date=row.get("death_date"),
+        birth_place=row.get("place_of_birth"),
+        death_place=row.get("place_of_death"),
         occupation=row.get("occupation"),
         spouse_id=row.get("spouse_id"),
         sex=row.get("sex"),
@@ -125,7 +127,7 @@ def remove_marriage_nodes(nodes):
 svg_width = 1200
 svg_height = 1600
 box_width = 160
-box_height = 60
+box_height = 54
 box_gap = 10
 x_unit = box_width * 1.5
 y_unit = box_height + box_gap
@@ -236,13 +238,24 @@ for node in all_nodes:
     # Add name text
     name_text = dwg.text(
         node.name,
-        insert=(node.x, node.y - 14),
+        insert=(node.x, node.y - 18),
         text_anchor="middle",
         dominant_baseline="middle",
         font_size="10px",
         font_family="Arial, sans-serif",
         fill="black",
         font_weight="bold",
+    )
+    dwg.add(name_text)
+
+    name_text = dwg.text(
+        node.get_attr("occupation") or "",
+        insert=(node.x, node.y - 6),
+        text_anchor="middle",
+        dominant_baseline="middle",
+        font_size="10px",
+        font_family="Arial, sans-serif",
+        fill="black",
     )
     dwg.add(name_text)
 
@@ -255,8 +268,27 @@ for node in all_nodes:
         for k, info in enumerate(info_lines):
             info_text = dwg.text(
                 info,
-                insert=(node.x, node.y - 24 + box_height / 2 + k * 12),
+                insert=(node.x - 4, node.y - 16 + box_height / 2 + k * 12),
                 text_anchor="end",
+                font_size="10px",
+                font_family="Arial, sans-serif",
+                fill="#666666",
+            )
+            dwg.add(info_text)
+
+    # Add birth/death place if available
+    info_lines = []
+    birthplace = node.get_attr("birth_place")
+    deathplace = node.get_attr("death_place")
+    info_lines.append(birthplace or "")
+    info_lines.append(deathplace or "")
+
+    if info_lines:
+        for k, info in enumerate(info_lines):
+            info_text = dwg.text(
+                info,
+                insert=(node.x, node.y - 16 + box_height / 2 + k * 12),
+                text_anchor="start",
                 font_size="10px",
                 font_family="Arial, sans-serif",
                 fill="#666666",
