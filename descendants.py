@@ -57,6 +57,8 @@ def build_tree(person_id):
                 person_id=str(spouse_id),
                 birth_date=spouse_row.get("birth_date"),
                 death_date=spouse_row.get("death_date"),
+                birth_place=spouse_row.get("place_of_birth"),
+                death_place=spouse_row.get("place_of_death"),
                 occupation=spouse_row.get("occupation"),
                 sex=spouse_row.get("sex"),
             )
@@ -92,7 +94,7 @@ if not root:
 reingold_tilford(
     root,
     sibling_separation=1.0,
-    subtree_separation=1.1,
+    subtree_separation=1.2,
     level_separation=0.5,
     x_offset=0.0,
     y_offset=0.0,
