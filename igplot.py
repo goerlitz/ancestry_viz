@@ -8,46 +8,64 @@ import igraph as ig
 # 3. children are centered below spouses
 
 # 1) Load your CSV (with columns "id" and "parent_id")
-df = pd.read_csv("data.csv", sep=";", dtype=str)
+df = pd.read_csv("data.csv", sep=";", dtype=str).set_index("id")
 df = df.where(df.notnull(), None)
 
-edges = []
+
+def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
+
+    edges = []
+
+    for index, entry in df.iterrows():
+        person_id = index
+        person_sx = entry["sex"]
+        parent_id = entry["father_id"]
+        spouse_id = entry["spouse_id"]
+        child_cnt = sum(df["father_id"] == person_id)
+
+        # ignore spouse nodes - handled separately
+        if person_id in exclude:
+            continue
+
+        # connect male spouse before female person (if exist)
+        if person_sx == "f" and spouse_id:
+            edges.append((f"anchor-{person_id}", spouse_id))
+
+        # create anchor node for marriage
+        edges.append((f"anchor-{person_id}", person_id))
+
+        # connect female spouse after male person (if exists)
+        if person_sx == "m" and spouse_id:
+            edges.append((f"anchor-{person_id}", spouse_id))
+
+        # connect parent's descendants hub with anchor (if exists)
+        if parent_id:
+            edges.append((f"hub1-{parent_id}", f"anchor-{person_id}"))
+
+        # create descendants hub for children (if exist)
+        if child_cnt:
+            edges.append((person_id, f"hub0-{person_id}"))
+            edges.append((person_id, f"hub1-{person_id}"))
+
+    return ig.Graph.TupleList(edges, directed=True, vertex_name_attr="name")
+
+
+def create_layout(g: ig.Graph, root: list):
+    layout = g.layout_reingold_tilford(root=root, mode="out")
+
+    # swap x and y axis and normalize to positive values
+    coords = layout.coords
+    offset = -min([x for x, y in coords])
+    return [(y, x + offset) for x, y in coords]
+
+
 spouse_ids = set(df["spouse_id"]) - {None}
+root_nodes = [p for p in df[df["father_id"].isnull()].index if not p in spouse_ids]
 
-for _, entry in df.iterrows():
-    person_id = entry["id"]
-    parent_id = entry["father_id"]
-    spouse_id = entry["spouse_id"]
-    child_cnt = sum(df["father_id"] == person_id)
-
-    # ignore spouse nodes - handled separately
-    if person_id in spouse_ids:
-        continue
-
-    # create anchor node for marriage
-    edges.append((f"anchor-{person_id}", person_id))
-
-    # connect spouse if exists
-    if spouse_id:
-        edges.append((f"anchor-{person_id}", spouse_id))
-
-    # connect parent's descendants hub with anchor if exists
-    if parent_id:
-        edges.append((f"hub1-{parent_id}", f"anchor-{person_id}"))
-
-    # create descendants hub if children exist
-    if child_cnt:
-        edges.append((person_id, f"hub0-{person_id}"))
-        edges.append((person_id, f"hub1-{person_id}"))
-
-g = ig.Graph.TupleList(edges, directed=True, vertex_name_attr="name")
-layout = g.layout_reingold_tilford(root=["anchor-0"], mode="out")
-
+g = create_graph(df, exclude=spouse_ids)
+coords = create_layout(g, [f"anchor-{id}" for id in root_nodes])
 names = g.vs["name"]
-coords = layout.coords  # list of (x, y)
-# normalize to positive x values
-offset = -min([x for x, y in coords])
-coords = [(x + offset, y) for x, y in coords]
+
 
 plt.figure(figsize=(12, 8))
 
@@ -60,13 +78,13 @@ for src, dst in g.get_edgelist():
     x2, y2 = coords[dst]
     plt.plot([x1, x2], [y1, y2], color="gray", linewidth=0.8)
 
-# Draw nodes (skip hub0-* nodes)
+# Draw nodes (skip helper nodes)
 for idx, (x, y) in enumerate(coords):
     name = names[idx]
     if "-" in name:
         continue
     plt.scatter(x, y, s=50, color="blue")
-    plt.text(x, y, name, fontsize=8, ha="center", va="bottom")
+    plt.text(x, y, df.loc[name]["name"], fontsize=8, ha="center", va="bottom")
 
 
 plt.title("Reingold–Tilford Layout via python-igraph")
