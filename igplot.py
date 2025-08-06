@@ -12,12 +12,17 @@ id_to_idx = {pid: i for i, pid in enumerate(ids)}
 
 # 2) Determine which IDs get a pair node: 
 #    only those that appear as a row ID, not those that appear only as a spouse
-spouse_ids = set(df["spouse_id"]) - {""}
-pair_ids = [pid for pid in ids if pid not in spouse_ids]
-pair_to_idx = {f"pair_{pid}": idx + len(ids) for idx, pid in enumerate(pair_ids)}
+spouse_ids = set(df["spouse_id"]) - {None}
+
+real_ids = [pid for pid in ids if pid not in spouse_ids]
+
+pair_to_idx = {f"pair_{pid}": idx + len(ids) for idx, pid in enumerate(real_ids)}
+hub1_to_idx = {f"hub1_{pid}": idx + len(ids) + len(real_ids) for idx, pid in enumerate(real_ids)}
+hub2_to_idx = {f"hub2_{pid}": idx + len(ids) + 2 * len(real_ids) for idx, pid in enumerate(real_ids)}
+# print(pair_to_idx)
 
 # Unified lookup
-node_index = {**id_to_idx, **pair_to_idx}
+# node_index = {**id_to_idx, **pair_to_idx, **hub_to_idx}
 
 edges = []
 roots = []
@@ -25,25 +30,40 @@ roots = []
 for _, row in df.iterrows():
     pid = row["father_id"]
     cid = row["id"]
+    # if cid in spouse_ids:
+    #   print("ignore spouse", cid)
     cid_idx = id_to_idx[cid]
     pair_key = f"pair_{cid}"
+    # hub_key = f"hub_{cid}"
     
     # 3a) Only create edges from parent → pair if this cid has a pair node
+    # if pid in id_to_idx:
     if pair_key in pair_to_idx:
+        
         pair_idx = pair_to_idx[pair_key]
+        hub1_idx = hub1_to_idx[f"hub1_{cid}"]
+        hub2_idx = hub2_to_idx[f"hub2_{cid}"]
+
         # parent → pair
         if pid and pid in id_to_idx:
-            edges.append((id_to_idx[pid], pair_idx))
+            parent_hub = f"hub2_{pid}"
+            edges.append((hub2_to_idx[parent_hub], pair_idx))
         else:
             # no parent ⇒ this pair is a root
             roots.append(pair_idx)
         # pair → person
         edges.append((pair_idx, cid_idx))
+        edges.append((cid_idx, hub1_idx))
+        edges.append((cid_idx, hub2_idx))
+        
 
         # 3b) spouse → same pair (if exists)
         sp = row.get("spouse_id")
         if sp and sp in id_to_idx:
             edges.append((pair_idx, id_to_idx[sp]))
+            # edges.append((id_to_idx[sp], hub2_idx))
+
+        # get children
     else:
         # This CID has no pair (it is only ever a spouse), so attach it directly to its parent
         if pid and pid in id_to_idx:
