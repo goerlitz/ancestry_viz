@@ -3,6 +3,7 @@ import svgwrite
 import igraph as ig
 from babel.dates import format_date
 from datetime import datetime
+from collections import defaultdict
 
 # Load your CSV
 df = pd.read_csv("data.csv", sep=";", dtype=str).set_index("id")
@@ -72,7 +73,8 @@ svg_width = 1040
 svg_height = 1600
 box_width = 168
 box_height = 58
-box_gap = 12
+box_gap = 8
+sib_gap = 8
 x_unit = box_width * 0.55
 y_unit = box_height + box_gap
 x_margin = -box_width * 0.5
@@ -84,6 +86,38 @@ text_font = "Georgia, 'Times New Roman', Times, serif"
 coords = create_layout(g, [f"anchor-{id}" for id in root_nodes])
 coords = to_canvas(coords)
 names = g.vs["name"]
+
+# post-process coordinates
+levels = defaultdict(list)
+for idx, (x, y) in enumerate(coords):
+    levels[x].append(idx)
+selected_levels = sorted(levels.keys())[::3]
+
+
+def get_level_nodes(level):
+    # get index of nodes in this level
+    return [
+        idx
+        for idx, _ in sorted(
+            ((i, y) for i, (x, y) in enumerate(coords) if abs(x - level) < 1e-6),
+            key=lambda t: t[1],
+        )
+    ]
+
+
+def apply_gaps(nodes, gaps):
+    for idx, gap in zip(nodes, gaps):
+        subs = g.subcomponent(idx, mode="OUT")
+        for node in subs:
+            x, y = coords[node]
+            coords[node] = (x, y + gap)
+
+
+# add gap between sibling trees on all levels (except leaf nodes)
+for level in selected_levels[:-1]:
+    level_idxs = get_level_nodes(level)
+    gaps = [i * sib_gap for i in range(len(level_idxs))]
+    apply_gaps(level_idxs, gaps)
 
 
 def date2str(value: str) -> str:
@@ -151,10 +185,12 @@ for idx, (x, y) in enumerate(coords):
     )
     dwg.add(box)
 
+    extra_space = 4 if person.occupation else 0
+
     # Add name text
     name_text = dwg.text(
         person["name"],
-        insert=(x, y - 18),
+        insert=(x, y - 14 - extra_space),
         text_anchor="middle",
         dominant_baseline="middle",
         font_size="10px",
@@ -246,7 +282,7 @@ for idx, person in df[df["marriage_date"].notna()].iterrows():
         insert=(x + 6, y),
         text_anchor="middle",
         dominant_baseline="middle",
-        font_size="8px",
+        font_size="9px",
         font_family=text_font,
         fill="#666666",
     )
@@ -258,7 +294,7 @@ for idx, person in df[df["marriage_date"].notna()].iterrows():
         insert=(x + 16, y),
         text_anchor="middle",
         dominant_baseline="middle",
-        font_size="8px",
+        font_size="9px",
         font_family=text_font,
         fill="#666666",
     )
