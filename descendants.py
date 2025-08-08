@@ -19,6 +19,8 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
         person_id = index
         person_sx = entry["sex"]
         parent_id = entry["father_id"]
+        if parent_id and "*" in parent_id:
+            parent_id = parent_id.replace("*", "")
         spouse_id = entry["spouse_id"]
         child_cnt = sum(df["father_id"] == person_id)
 
@@ -266,11 +268,25 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
 mask = df["father_id"].notna() & ~df.index.isin(spouse_ids)
 for idx, person in df[mask].iterrows():
 
-    (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[person.father_id]
+    parent_id = person.father_id
+    dashed = []
+    if parent_id and "*" in parent_id:
+        parent_id = parent_id.replace("*", "")
+        dashed = "5 5"
+
+    (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
     cx = cx - box_width / 2 - 4
     x_mid = cx - 24
     d = f"M {px+24},{py} L {x_mid},{py} L {x_mid},{cy} L {cx},{cy}"
-    dwg.add(dwg.path(d=d, stroke="lightgray", fill="none", stroke_width=1.2))
+    dwg.add(
+        dwg.path(
+            d=d,
+            stroke="lightgray",
+            fill="none",
+            stroke_width=1.2,
+            stroke_dasharray=dashed,
+        )
+    )
 
 # place marriage info
 for idx, person in df[df["marriage_date"].notna()].iterrows():
