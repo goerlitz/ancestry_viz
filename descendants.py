@@ -215,6 +215,20 @@ for idx, (x, y) in enumerate(coords):
     )
     dwg.add(box)
 
+    # add person id left side of box
+    id_text = dwg.text(
+        person.name,
+        insert=(x - box_width / 2 + 6, y),
+        text_anchor="middle",
+        dominant_baseline="middle",
+        font_size="10px",
+        font_family=text_font,
+        fill="white",
+        font_weight="bold",
+    )
+    id_text.rotate(-90, center=(x - box_width / 2 + 6, y))
+    dwg.add(id_text)
+
     extra_space = 4 if person.occupation else 0
 
     # Add name text
