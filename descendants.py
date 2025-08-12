@@ -4,6 +4,8 @@ import igraph as ig
 from babel.dates import format_date
 from datetime import datetime
 from collections import defaultdict
+from PIL import ImageFont
+import re
 
 # Load your CSV
 df = pd.read_csv("data.csv", sep=";", dtype=str).set_index("id")
@@ -84,6 +86,8 @@ y_margin = box_height * 0.8
 # text_font="Apple Chancery, cursive"
 # text_font = "Arial, sans-serif"
 text_font = "Georgia, 'Times New Roman', Times, serif"
+font_name = text_font.split(",")[0]
+font_path = f"/System/Library/Fonts/Supplemental/{font_name} Bold.ttf"
 
 coords = create_layout(g, [f"anchor-{id}" for id in root_nodes])
 coords = to_canvas(coords)
@@ -145,6 +149,22 @@ dwg = svgwrite.Drawing("./descendants_tree.svg", size=(svg_width, svg_height))
 # dwg.add(dwg.rect(insert=(0, 0), size=(svg_width, svg_height), fill="white"))
 
 
+def underline_quoted_text(dwg, text, font_size, x_pos, y_pos):
+    # get length of text
+    font = ImageFont.truetype(font_path, int(font_size.rstrip("'pxptem%")))
+    text_width = font.getlength(text.replace("'", ""))
+
+    # get locations of quotes and translate to angles from center
+    positions = [m.start() for m in re.finditer("'", text)]
+    widths = [font.getlength(text[0:pos].replace("'", "")) for pos in positions]
+    pos = [x_pos - text_width / 2 + w for w in widths]
+
+    path_d = f"M {pos[0]},{y_pos} L {pos[1]},{y_pos}"
+
+    path = dwg.path(d=path_d, fill="none", stroke="black", stroke_width=1.1)
+    dwg.add(path)
+
+
 def get_colors(is_male: bool, is_spouse: bool):
     """
     Returns (fill_color, stroke_color) based on gender and spouse-status.
@@ -199,7 +219,7 @@ for idx, (x, y) in enumerate(coords):
 
     # Add name text
     name_text = dwg.text(
-        person["name"],
+        person["name"].replace("'", ""),
         insert=(x, y - 14 - extra_space),
         text_anchor="middle",
         dominant_baseline="middle",
@@ -210,9 +230,12 @@ for idx, (x, y) in enumerate(coords):
     )
     dwg.add(name_text)
 
+    if "'" in person["name"]:
+        underline_quoted_text(dwg, person["name"], "10px", x, y - 9 - extra_space)
+
     name_text = dwg.text(
         person["occupation"] or "",
-        insert=(x, y - 6),
+        insert=(x, y - 4),
         text_anchor="middle",
         dominant_baseline="middle",
         font_size="10px",
