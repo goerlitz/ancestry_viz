@@ -22,7 +22,7 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
         if parent_id and "*" in parent_id:
             parent_id = parent_id.replace("*", "")
         spouse_id = entry["spouse_id"]
-        child_cnt = sum(df["father_id"] == person_id)
+        child_cnt = sum(df.father_id.str.replace("*", "") == person_id)
 
         # ignore spouse nodes - handled separately
         if person_id in exclude:
@@ -71,15 +71,15 @@ g = create_graph(df, exclude=spouse_ids)
 
 
 # Create SVG with x/y coordinate swap for left-to-right layout
-svg_width = 1040
-svg_height = 1600
+svg_width = 1000
+svg_height = 2800
 box_width = 168
 box_height = 58
 box_gap = 8
 sib_gap = 8
-x_unit = box_width * 0.55
+x_unit = box_width * 0.5
 y_unit = box_height + box_gap
-x_margin = -box_width * 0.5
+x_margin = -box_width * 0.4
 y_margin = box_height * 0.8
 # text_font="Apple Chancery, cursive"
 # text_font = "Arial, sans-serif"
@@ -109,17 +109,21 @@ def get_level_nodes(level):
 
 def apply_gaps(nodes, gaps):
     for idx, gap in zip(nodes, gaps):
-        subs = g.subcomponent(idx, mode="OUT")
-        for node in subs:
+        children = g.subcomponent(idx, mode="OUT")
+        for node in children:
             x, y = coords[node]
             coords[node] = (x, y + gap)
+        # parents = g.subcomponent(idx, mode="IN")
+        # for node in parents:
+        #     x, y = coords[node]
+        #     coords[node] = (x, y + gap / 2)
 
 
 # add gap between sibling trees on all levels (except leaf nodes)
 for level in selected_levels[:-1]:
     level_idxs = get_level_nodes(level)
     gaps = [i * sib_gap for i in range(len(level_idxs))]
-    apply_gaps(level_idxs, gaps)
+    # apply_gaps(level_idxs, gaps)
 
 
 def date2str(value: str) -> str:
@@ -146,6 +150,7 @@ def get_colors(is_male: bool, is_spouse: bool):
     Returns (fill_color, stroke_color) based on gender and spouse-status.
     Spouses get a muted variant of the base palette.
     """
+
     # Base (non-spouse) palette
     if is_male:
         base_fill, base_stroke = "#E3F2FD", "#4A90E2"  # light blue / blue
@@ -169,6 +174,9 @@ for idx, (x, y) in enumerate(coords):
     name = names[idx]
     if "-" in name:
         continue
+
+    if (df.index == name).sum() > 1:
+        print("WARN duplicate key:", name)
 
     person = df.loc[name]
 
@@ -251,6 +259,20 @@ for idx, (x, y) in enumerate(coords):
             )
             dwg.add(info_text)
 
+    # add religion
+    rel = "📖" if person.rel == "ev" else "✞" if person.rel == "kath" else None
+    if rel:
+        info_text = dwg.text(
+            rel,
+            insert=(x - box_width / 2 + 2, y - box_height / 2 + 8),
+            text_anchor="start",
+            dominant_baseline="middle",
+            font_size="12px",
+            font_family=text_font,
+            fill="#666666",
+        )
+        dwg.add(info_text)
+
 # for coord lookup
 name_to_idx = {name: idx for idx, name in enumerate(names)}
 marriage_coords = {}
@@ -268,12 +290,13 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
 mask = df["father_id"].notna() & ~df.index.isin(spouse_ids)
 for idx, person in df[mask].iterrows():
 
+    dashed = "none"
     parent_id = person.father_id
-    dashed = []
     if parent_id and "*" in parent_id:
         parent_id = parent_id.replace("*", "")
         dashed = "5 5"
 
+    # must have both parents
     (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
     cx = cx - box_width / 2 - 4
     x_mid = cx - 24
