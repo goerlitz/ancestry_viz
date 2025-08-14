@@ -12,6 +12,56 @@ df = pd.read_csv("data.csv", sep=";", dtype=str).set_index("id")
 df = df.where(df.notnull(), None)
 print(f"Loaded {len(df)} records from data.csv")
 
+# SVG path for protestant icon
+book_d = (
+    "M 8.2404 6.2054"
+    "L -7.9606 6.2054"
+    "C -9.1892 6.2054, -10.0000 7.8160, -9.9408 8.0984"
+    "L -9.1704 -8.5156"
+    "C -9.1260 -9.4446, -8.6814 -9.9534, -7.8534 -9.9562"
+    "L 6.3718 -9.9996"
+    "C 6.4914 -10.0000, 6.6478 -9.9024, 6.6596 -9.7812"
+    "Z"
+    "M 7.6022 6.2326"
+    "L 7.9072 9.3592"
+    "C 7.9370 9.6624, 7.8196 9.9218, 7.3876 9.9236"
+    "L -7.9606 9.9942"
+    "C -9.1892 10.0000, -10.0000 8.6244, -9.9408 8.0984"
+    "M -0.8798 3.6152"
+    "L -0.8798 -7.2304"
+    "M -4.4950 -3.6152"
+    "L 2.7354 -3.6152"
+)
+
+mitra_d = (
+    "M -4.5394 10.0000"
+    "L -7.5000 1.5790"
+    "C -9.4736 -1.0526, -3.5526 -7.6316, 0.0000 -10.0000"
+    "C 3.5526 -7.6316, 9.4736 -1.0526, 7.5000 1.5790"
+    "L 4.5394 10.0000"
+    "Q 0.0000 8.1578, -4.5394 10.0000"
+    "Z"
+    "M 0.0000 -5.0000"
+    "L 0.0000 4.8684"
+    "M -2.9606 -1.0526"
+    "L 2.9606 -1.0526"
+)
+
+
+def draw_confession(dwg, x, y, is_kath=False):
+    d = mitra_d if is_kath else book_d
+    # Translate to desired position, e.g. (300, 300)
+    path = dwg.path(
+        d=d,
+        fill="none",
+        stroke="gray",
+        stroke_width=2,
+        # stroke_linecap="round",
+        stroke_linejoin="round",
+        transform=f"translate({x},{y}) scale(0.45)",
+    )
+    dwg.add(path)
+
 
 def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
 
@@ -47,8 +97,9 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
 
         # create descendants hub for children (if exist)
         if child_cnt:
-            edges.append((person_id, f"hub0-{person_id}"))
-            edges.append((person_id, f"hub1-{person_id}"))
+            ref_id = spouse_id if person_sx == "f" and spouse_id else person_id
+            edges.append((ref_id, f"hub0-{person_id}"))
+            edges.append((ref_id, f"hub1-{person_id}"))
 
     return ig.Graph.TupleList(edges, directed=True, vertex_name_attr="name")
 
@@ -133,6 +184,8 @@ for level in selected_levels[:-1]:
 def date2str(value: str) -> str:
     if pd.isnull(value) or value == "":
         return ""
+    if value.startswith("#"):
+        return value
 
     try:
         date_obj = datetime.strptime(value, "%Y-%m-%d")
@@ -297,18 +350,21 @@ for idx, (x, y) in enumerate(coords):
             dwg.add(info_text)
 
     # add religion
-    rel = "📖" if person.rel == "ev" else "✞" if person.rel == "kath" else None
-    if rel:
-        info_text = dwg.text(
-            rel,
-            insert=(x - box_width / 2 + 2, y - box_height / 2 + 8),
-            text_anchor="start",
-            dominant_baseline="middle",
-            font_size="12px",
-            font_family=text_font,
-            fill="#666666",
+    # rel = "📖" if person.rel == "ev" else "✞" if person.rel == "kath" else None
+    if person.rel:
+        draw_confession(
+            dwg, x - box_width / 2 - 8, y - box_height / 2 + 8, person.rel == "kath"
         )
-        dwg.add(info_text)
+        # info_text = dwg.text(
+        #     rel,
+        #     insert=(x - box_width / 2 + 2, y - box_height / 2 + 8),
+        #     text_anchor="start",
+        #     dominant_baseline="middle",
+        #     font_size="12px",
+        #     font_family=text_font,
+        #     fill="#666666",
+        # )
+        # dwg.add(info_text)
 
 # for coord lookup
 name_to_idx = {name: idx for idx, name in enumerate(names)}
@@ -334,6 +390,10 @@ for idx, person in df[mask].iterrows():
         dashed = "5 5"
 
     # must have both parents
+    if parent_id not in marriage_coords:
+        print("marriage not found:", idx, person["name"], parent_id)
+        continue
+
     (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
     cx = cx - box_width / 2 - 4
     x_mid = cx - 24
@@ -351,6 +411,9 @@ for idx, person in df[mask].iterrows():
 # place marriage info
 for idx, person in df[df["marriage_date"].notna()].iterrows():
     marr_date = date2str(person.marriage_date)
+    if idx not in marriage_coords:
+        print("WARN marriage coords not found for", idx, person["name"])
+        continue
     (x, y) = marriage_coords[idx]
 
     text = dwg.text(
@@ -366,7 +429,7 @@ for idx, person in df[df["marriage_date"].notna()].iterrows():
     dwg.add(text)
 
     text = dwg.text(
-        person.place_of_marriage,
+        person.place_of_marriage or "",
         insert=(x + 16, y),
         text_anchor="middle",
         dominant_baseline="middle",
@@ -376,6 +439,7 @@ for idx, person in df[df["marriage_date"].notna()].iterrows():
     )
     text.rotate(-90, center=(x + 16, y))
     dwg.add(text)
+
 
 dwg.save()
 print("SVG file created: descendants_tree.svg")
