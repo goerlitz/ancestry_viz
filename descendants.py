@@ -41,10 +41,8 @@ mitra_d = (
     "L 4.5394 10.0000"
     "Q 0.0000 8.1578, -4.5394 10.0000"
     "Z"
-    "M 0.0000 -5.0000"
-    "L 0.0000 4.8684"
-    "M -2.9606 -1.0526"
-    "L 2.9606 -1.0526"
+    "M 0 -5 L 0 5"
+    "M -3 -1 L 3 -1"
 )
 
 
@@ -124,8 +122,8 @@ g = create_graph(df, exclude=spouse_ids)
 
 
 # Create SVG with x/y coordinate swap for left-to-right layout
-svg_width = 1000
-svg_height = 2800
+svg_width = 1400
+svg_height = 4000
 box_width = 168
 box_height = 58
 box_gap = 8
@@ -274,10 +272,10 @@ for idx, (x, y) in enumerate(coords):
         insert=(x - box_width / 2 + 6, y),
         text_anchor="middle",
         dominant_baseline="middle",
-        font_size="10px",
+        font_size="8px",
         font_family=text_font,
         fill="white",
-        font_weight="bold",
+        # font_weight="bold",
     )
     id_text.rotate(-90, center=(x - box_width / 2 + 6, y))
     dwg.add(id_text)
@@ -350,21 +348,10 @@ for idx, (x, y) in enumerate(coords):
             dwg.add(info_text)
 
     # add religion
-    # rel = "📖" if person.rel == "ev" else "✞" if person.rel == "kath" else None
     if person.rel:
         draw_confession(
             dwg, x - box_width / 2 - 8, y - box_height / 2 + 8, person.rel == "kath"
         )
-        # info_text = dwg.text(
-        #     rel,
-        #     insert=(x - box_width / 2 + 2, y - box_height / 2 + 8),
-        #     text_anchor="start",
-        #     dominant_baseline="middle",
-        #     font_size="12px",
-        #     font_family=text_font,
-        #     fill="#666666",
-        # )
-        # dwg.add(info_text)
 
 # for coord lookup
 name_to_idx = {name: idx for idx, name in enumerate(names)}
