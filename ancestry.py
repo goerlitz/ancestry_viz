@@ -8,6 +8,8 @@ from svgwrite import gradients
 from dataclasses import dataclass
 from typing import List, Tuple
 from PIL import ImageFont
+from babel.dates import format_date
+from datetime import datetime
 
 
 @dataclass
@@ -30,7 +32,9 @@ male_color = "#4A90E2"
 female_color = "#FF6EC7"
 
 # Parameters
-center = (800, 920)
+# margin_x = 35
+size = (1600, 1200)  # must be 4x3 aspect ratio
+center = (size[0] / 2, size[1] / 4 * 3.1)
 num_rings = 5
 segments_per_ring = [2, 4, 8, 16, 32]
 total_angle = 200.0
@@ -227,7 +231,7 @@ def load_people_from_csv(filename: str) -> List[List[Person]]:
 (ring_data, wedd_data, children) = load_people_from_csv("people.csv")
 
 # Create SVG drawing
-dwg = svgwrite.Drawing("./radial_family.svg", size=("1600px", "1200px"))
+dwg = svgwrite.Drawing("./radial_family.svg", size=(f"{size[0]}px", f"{size[1]}px"))
 # dwg.add(dwg.rect(insert=(0, 0), size=("1000px", "1000px"), fill="white"))
 # embed_font(dwg, get_font_base64())
 
@@ -236,7 +240,7 @@ title_font = "Apple Chancery, cursive"
 
 title = dwg.text(
     "Stammbaum",
-    insert=(center[0], 70),
+    insert=(center[0], 80),
     text_anchor="middle",
     font_size="72px",
     font_family=title_font,
@@ -247,14 +251,26 @@ dwg.add(title)
 
 title = dwg.text(
     "der Familie Görlitz",
-    insert=(center[0], 120),
+    insert=(center[0], 128),
     text_anchor="middle",
-    font_size="36px",
+    font_size="38px",
     font_family=subtitle_font,
     fill="#2c3e50",
     # font_weight="bold"
 )
 dwg.add(title)
+
+today = format_date(datetime.today(), format="d. MMM y", locale="de")
+version = dwg.text(
+    f"Stand: {today}",
+    insert=(32, size[1] - 20),
+    text_anchor="start",
+    font_size="12px",
+    font_family=text_font,
+    fill="#2c3e50",
+    # font_weight="bold"
+)
+dwg.add(version)
 
 # Define shiny gold gradient
 linear_gradient = dwg.linearGradient(
@@ -403,13 +419,24 @@ def underline_quoted_text_line(dwg, line, font_size, center_radius, angle):
     dwg.add(arc_path)
 
 
-def create_text(dwg, font_size, text_anchor, path_id, line, start_offset, font=text_font, bold=False):
+def create_text(
+    dwg,
+    font_size,
+    text_anchor,
+    path_id,
+    line,
+    start_offset,
+    font=text_font,
+    bold=False,
+    lsp=0,
+):
 
     text = dwg.text(
         "",
         font_size=font_size,
         text_anchor=text_anchor,
         font_family=font,
+        letter_spacing=lsp,
     )
 
     text_path = dwg.textPath(
@@ -758,10 +785,20 @@ for ring_no, (base_radius, segments, angle_span) in enumerate(
                     create_text_path(dwg, text_path[0], path_id)
                     create_text(dwg, "11px", "end", path_id, date_part, "96%")
 
+                    # TODO: calculate real text length and compare with path length
+                    font_size = "9px" if len(place_part) >= 14 else "11px"
                     # Place: left-aligned, right arc
                     path_id = f"path_r{ring_no}_s{seg_no}_l{k}_place"
                     create_text_path(dwg, text_path[1], path_id)
-                    create_text(dwg, "11px", "start", path_id, place_part, "4%")
+                    create_text(
+                        dwg,
+                        font_size,
+                        "start",
+                        path_id,
+                        place_part,
+                        "4%",
+                        lsp=-0.5 if len(place_part) >= 14 else 0,
+                    )
                 else:
                     path_id = f"path_r{ring_no}_s{seg_no}_l{k}"
                     create_text_path(dwg, text_path, path_id)
