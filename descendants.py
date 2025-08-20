@@ -61,6 +61,19 @@ def draw_confession(dwg, x, y, is_kath=False):
     dwg.add(path)
 
 
+def children_grouped_by_union(df_kids, focal_id):
+    groups = (
+        df_kids.reset_index()
+        .groupby("parent2_id", dropna=False)
+        .id.agg(list)
+        .rename("children")
+        .reset_index()
+    )
+    print(df.loc[focal_id]["name"])
+    for row in groups.itertuples(index=False):
+        print("  ", row.parent2_id, "→", [df.loc[id]["name"] for id in row.children])
+
+
 def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
 
     edges = []
@@ -68,11 +81,20 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
     for index, entry in df.iterrows():
         person_id = index
         person_sx = entry["sex"]
-        parent_id = entry["father_id"]
+        parent_id = entry["parent1_id"]
         if parent_id and "*" in parent_id:
             parent_id = parent_id.replace("*", "")
         spouse_id = entry["spouse_id"]
-        child_cnt = sum(df.father_id.str.replace("*", "") == person_id)
+        child_match = df.parent1_id.str.replace("*", "") == person_id
+        child_cnt = sum(child_match)
+
+        # group children unions
+        if not person_id in exclude and child_cnt != 0:
+            children_grouped_by_union(df[child_match], person_id)
+
+        # TODO: check for multiple spouses
+        if spouse_id and ":" in spouse_id:
+            spouse_id = spouse_id.split(":")[0]
 
         # ignore spouse nodes - handled separately
         if person_id in exclude:
@@ -115,15 +137,17 @@ def to_canvas(coords):
     return [(x * x_unit + x_margin, y * y_unit + y_margin) for x, y in coords]
 
 
-spouse_ids = set(df["spouse_id"]) - {None}
-root_nodes = [p for p in df[df["father_id"].isnull()].index if not p in spouse_ids]
+# spouse_ids = set(df["spouse_id"]) - {None}
+spouse_ids = df["spouse_id"].dropna().str.split(":").explode().pipe(set) - {None}
+
+root_nodes = [p for p in df[df["parent1_id"].isnull()].index if not p in spouse_ids]
 
 g = create_graph(df, exclude=spouse_ids)
 
 
 # Create SVG with x/y coordinate swap for left-to-right layout
 svg_width = 1400
-svg_height = 4000
+svg_height = 4400
 box_width = 168
 box_height = 58
 box_gap = 8
@@ -367,11 +391,11 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
     dwg.add(dwg.path(d=d, stroke="lightgray", fill="none", stroke_width=1.2))
 
 # draw parent connections
-mask = df["father_id"].notna() & ~df.index.isin(spouse_ids)
+mask = df["parent1_id"].notna() & ~df.index.isin(spouse_ids)
 for idx, person in df[mask].iterrows():
 
     dashed = "none"
-    parent_id = person.father_id
+    parent_id = person.parent1_id
     if parent_id and "*" in parent_id:
         parent_id = parent_id.replace("*", "")
         dashed = "5 5"
