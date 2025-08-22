@@ -147,7 +147,7 @@ g = create_graph(df, exclude=spouse_ids)
 
 # Create SVG with x/y coordinate swap for left-to-right layout
 svg_width = 1400
-svg_height = 4400
+svg_height = 5000
 box_width = 168
 box_height = 58
 box_gap = 8
@@ -208,6 +208,8 @@ def date2str(value: str) -> str:
         return ""
     if value.startswith("#"):
         return value
+    if value.startswith("x"):
+        value = value[1:]
 
     try:
         date_obj = datetime.strptime(value, "%Y-%m-%d")
@@ -336,9 +338,11 @@ for idx, (x, y) in enumerate(coords):
     # Add birth/death info if available
     info_lines = []
     birthdate = date2str(person["birth_date"])
-    deathdate = date2str(person["death_date"])
+    dd = person["death_date"]
+    kia = dd and dd.startswith("x")
+    deathdate = date2str(dd)
     info_lines.append(f"* {birthdate}")
-    info_lines.append(f"† {deathdate}")
+    info_lines.append(f"{'⚔' if kia else '†'} {deathdate}")
 
     if info_lines:
         for k, info in enumerate(info_lines):
