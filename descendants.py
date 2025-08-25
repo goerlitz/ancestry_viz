@@ -69,9 +69,28 @@ def children_grouped_by_union(df_kids, focal_id):
         .rename("children")
         .reset_index()
     )
-    print(df.loc[focal_id]["name"])
-    for row in groups.itertuples(index=False):
-        print("  ", row.parent2_id, "→", [df.loc[id]["name"] for id in row.children])
+    # print(df.loc[focal_id]["name"])
+    # for row in groups.itertuples(index=False):
+    #     print("  ", row.parent2_id, "→", [df.loc[id]["name"] for id in row.children])
+
+
+def get_spouses(person_id, person_sx, spouse_id) -> list:
+    """Create ordered list of spouse nodes and children hubs."""
+
+    spouses = [] if not spouse_id else spouse_id.split(":")
+
+    # order spouse nodes (male first in case of two spouses)
+    if len(spouses) == 0:
+        nodes = [person_id]
+        hubs = [(person_id, f"hub1-{person_id}")]
+    elif len(spouses) == 1:
+        nodes = [*spouses, person_id] if person_sx == "f" else [person_id, *spouses]
+        hubs = [(nodes[0], f"hub{i}-{person_id}") for i in range(len(nodes))]
+    else:
+        nodes = [spouses[0], person_id, spouses[1]]
+        hubs = [(person_id, f"hub{i}-{person_id}") for i in range(len(nodes))]
+
+    return (nodes, hubs)
 
 
 def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
@@ -92,34 +111,23 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
         if not person_id in exclude and child_cnt != 0:
             children_grouped_by_union(df[child_match], person_id)
 
-        # TODO: check for multiple spouses
-        if spouse_id and ":" in spouse_id:
-            spouse_id = spouse_id.split(":")[0]
-
         # ignore spouse nodes - handled separately
         if person_id in exclude:
             continue
 
-        # connect male spouse before female person (if exist)
-        if person_sx == "f" and spouse_id:
-            edges.append((f"anchor-{person_id}", spouse_id))
+        (spouse_nodes, hubs) = get_spouses(person_id, person_sx, spouse_id)
+        for sp in spouse_nodes:
+            if sp != "-":
+                edges.append((f"anchor-{person_id}", sp))
 
-        # create anchor node for marriage
-        edges.append((f"anchor-{person_id}", person_id))
-
-        # connect female spouse after male person (if exists)
-        if person_sx == "m" and spouse_id:
-            edges.append((f"anchor-{person_id}", spouse_id))
+        # create descendants hub for children (if exist)
+        if child_cnt:
+            for hub in hubs:
+                edges.append(hub)
 
         # connect parent's descendants hub with anchor (if exists)
         if parent_id:
             edges.append((f"hub1-{parent_id}", f"anchor-{person_id}"))
-
-        # create descendants hub for children (if exist)
-        if child_cnt:
-            ref_id = spouse_id if person_sx == "f" and spouse_id else person_id
-            edges.append((ref_id, f"hub0-{person_id}"))
-            edges.append((ref_id, f"hub1-{person_id}"))
 
     return ig.Graph.TupleList(edges, directed=True, vertex_name_attr="name")
 
@@ -146,7 +154,7 @@ g = create_graph(df, exclude=spouse_ids)
 
 
 # Create SVG with x/y coordinate swap for left-to-right layout
-svg_width = 1400
+svg_width = 1500
 svg_height = 5000
 box_width = 168
 box_height = 58
@@ -308,9 +316,11 @@ for idx, (x, y) in enumerate(coords):
 
     extra_space = 4 if person.occupation else 0
 
+    name = person["name"] or ""
+
     # Add name text
     name_text = dwg.text(
-        person["name"].replace("'", ""),
+        name.replace("'", ""),
         insert=(x, y - 14 - extra_space),
         text_anchor="middle",
         dominant_baseline="middle",
@@ -321,7 +331,7 @@ for idx, (x, y) in enumerate(coords):
     )
     dwg.add(name_text)
 
-    if "'" in person["name"]:
+    if "'" in name:
         underline_quoted_text(dwg, person["name"], "10px", x, y - 9 - extra_space)
 
     name_text = dwg.text(
@@ -387,12 +397,24 @@ marriage_coords = {}
 
 # draw spouse connections
 for idx, person in df[df.spouse_id.notna()].iterrows():
-    (x1, y1), (x2, y2) = coords[name_to_idx[idx]], coords[name_to_idx[person.spouse_id]]
+    spouses = person.spouse_id.split(":")
+    for i, spouse_id in enumerate(spouses):
+        idx_coords = coords[name_to_idx[idx]]
+        sp_coords = coords[name_to_idx[spouse_id]] if spouse_id != "-" else idx_coords
 
-    x = x1 + box_width / 2 + 4
-    marriage_coords[idx] = (x, (y1 + y2) / 2)
-    d = f"M {x},{y1} L {x+24},{y1} L {x+24},{y2} L {x},{y2}"
-    dwg.add(dwg.path(d=d, stroke="lightgray", fill="none", stroke_width=1.2))
+        # Apply offsets only if there are multiple spouses
+        if len(spouses) > 1:
+            offset = -2 if i == 0 else 2
+            idx_coords = (idx_coords[0], idx_coords[1] + offset)
+            sp_coords = (sp_coords[0], sp_coords[1] + offset)
+
+        (x1, y1), (x2, y2) = idx_coords, sp_coords
+        x = x1 + box_width / 2 + 4
+
+        marr_id = idx if len(spouses) == 1 else f"{idx}+{spouse_id}"
+        marriage_coords[marr_id] = (x, (y1 + y2) / 2)
+        d = f"M {x},{y1} L {x+24},{y1} L {x+24},{y2} L {x},{y2}"
+        dwg.add(dwg.path(d=d, stroke="lightgray", fill="none", stroke_width=1.2))
 
 # draw parent connections
 mask = df["parent1_id"].notna() & ~df.index.isin(spouse_ids)
@@ -404,9 +426,13 @@ for idx, person in df[mask].iterrows():
         parent_id = parent_id.replace("*", "")
         dashed = "5 5"
 
+    # add second parent
+    if person.parent2_id:
+        parent_id += f"+{person.parent2_id}"
+
     # must have both parents
     if parent_id not in marriage_coords:
-        print("marriage not found:", idx, person["name"], parent_id)
+        print("parent not found:", idx, person["name"], "->", parent_id)
         continue
 
     (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
@@ -425,35 +451,46 @@ for idx, person in df[mask].iterrows():
 
 # place marriage info
 for idx, person in df[df["marriage_date"].notna()].iterrows():
-    marr_date = date2str(person.marriage_date)
-    if idx not in marriage_coords:
-        print("WARN marriage coords not found for", idx, person["name"])
-        continue
-    (x, y) = marriage_coords[idx]
 
-    text = dwg.text(
-        f"⚭ {marr_date}",
-        insert=(x + 6, y),
-        text_anchor="middle",
-        dominant_baseline="middle",
-        font_size="9px",
-        font_family=text_font,
-        fill="#666666",
-    )
-    text.rotate(-90, center=(x + 6, y))
-    dwg.add(text)
+    marr_dates = person.marriage_date.split(":")
+    spouses = person.spouse_id.split(":")
+    places = person.place_of_marriage.split(":")
 
-    text = dwg.text(
-        person.place_of_marriage or "",
-        insert=(x + 16, y),
-        text_anchor="middle",
-        dominant_baseline="middle",
-        font_size="9px",
-        font_family=text_font,
-        fill="#666666",
-    )
-    text.rotate(-90, center=(x + 16, y))
-    dwg.add(text)
+    for dt, sp_id, place in zip(marr_dates, spouses, places):
+        if sp_id == "-":
+            continue
+
+        marr_id = idx if len(spouses) == 1 else f"{idx}+{sp_id}"
+
+        marr_date = date2str(dt)
+        if marr_id not in marriage_coords:
+            print("WARN marriage coords not found for", idx, person["name"])
+            continue
+        (x, y) = marriage_coords[marr_id]
+
+        text = dwg.text(
+            f"⚭ {marr_date}",
+            insert=(x + 6, y),
+            text_anchor="middle",
+            dominant_baseline="middle",
+            font_size="9px",
+            font_family=text_font,
+            fill="#666666",
+        )
+        text.rotate(-90, center=(x + 6, y))
+        dwg.add(text)
+
+        text = dwg.text(
+            place or "",
+            insert=(x + 16, y),
+            text_anchor="middle",
+            dominant_baseline="middle",
+            font_size="9px",
+            font_family=text_font,
+            fill="#666666",
+        )
+        text.rotate(-90, center=(x + 16, y))
+        dwg.add(text)
 
 
 dwg.save()
