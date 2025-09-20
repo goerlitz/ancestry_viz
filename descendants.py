@@ -98,7 +98,12 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
     edges = []
 
     for index, entry in df.iterrows():
+
         person_id = index
+        if not "sex" in entry:
+            print(f"person {index}/{person_id} has no sex.")
+            continue
+
         person_sx = entry["sex"]
         parent_id = entry["parent1_id"]
         if parent_id and "*" in parent_id:
@@ -149,13 +154,14 @@ def to_canvas(coords):
 spouse_ids = df["spouse_id"].dropna().str.split(":").explode().pipe(set) - {None}
 
 root_nodes = [p for p in df[df["parent1_id"].isnull()].index if not p in spouse_ids]
+# root_nodes = ['531035']
 
 g = create_graph(df, exclude=spouse_ids)
 
 
 # Create SVG with x/y coordinate swap for left-to-right layout
 svg_width = 1500
-svg_height = 5000
+svg_height = 8400
 box_width = 168
 box_height = 58
 box_gap = 8
@@ -244,6 +250,10 @@ def underline_quoted_text(dwg, text, font_size, x_pos, y_pos):
     widths = [font.getlength(text[0:pos].replace("'", "")) for pos in positions]
     pos = [x_pos - text_width / 2 + w for w in widths]
 
+    if len(pos) != 2:
+        print(f"invalid underline '{text}' ({pos})")
+        return
+
     path_d = f"M {pos[0]},{y_pos} L {pos[1]},{y_pos}"
 
     path = dwg.path(d=path_d, fill="none", stroke="black", stroke_width=1.1)
@@ -298,21 +308,30 @@ for idx, (x, y) in enumerate(coords):
         stroke_width=1.5,
         rx=4,  # rounded corners
     )
-    dwg.add(box)
+    # add link
+    if len(name) > 4:
+      link = dwg.a(
+          f"https://meine-ahnen.eu/-/MA.dll?T=gedsql:db:indichart&home_id=0&indi={name}",
+          target="_blank",
+      )
+      link.add(box)
+      dwg.add(link)
 
-    # add person id left side of box
-    id_text = dwg.text(
-        person.name,
-        insert=(x - box_width / 2 + 6, y),
-        text_anchor="middle",
-        dominant_baseline="middle",
-        font_size="8px",
-        font_family=text_font,
-        fill="white",
-        # font_weight="bold",
-    )
-    id_text.rotate(-90, center=(x - box_width / 2 + 6, y))
-    dwg.add(id_text)
+      # add person id left side of box
+      id_text = dwg.text(
+          person.name,
+          insert=(x - box_width / 2 + 6, y),
+          text_anchor="middle",
+          dominant_baseline="middle",
+          font_size="8px",
+          font_family=text_font,
+          fill="white",
+          # font_weight="bold",
+      )
+      id_text.rotate(-90, center=(x - box_width / 2 + 6, y))
+      dwg.add(id_text)
+    else:
+      dwg.add(box)
 
     extra_space = 4 if person.occupation else 0
 
@@ -430,6 +449,13 @@ for idx, person in df[mask].iterrows():
     if person.parent2_id:
         parent_id += f"+{person.parent2_id}"
 
+    # get index of marriage
+    midx = 0
+    if '+' in parent_id:
+      x = [mc for mc in marriage_coords if mc.startswith(parent_id.split('+')[0])]
+      midx = [i for i, mc in enumerate(x) if mc == parent_id][0]
+      # print(parent_id, x, midx)
+
     # must have both parents
     if parent_id not in marriage_coords:
         print("parent not found:", idx, person["name"], "->", parent_id)
@@ -438,6 +464,7 @@ for idx, person in df[mask].iterrows():
     (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
     cx = cx - box_width / 2 - 4
     x_mid = cx - 24
+    x_mid += midx * 8
     d = f"M {px+24},{py} L {x_mid},{py} L {x_mid},{cy} L {cx},{cy}"
     dwg.add(
         dwg.path(
