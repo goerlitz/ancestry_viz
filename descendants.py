@@ -106,6 +106,7 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
 
         person_sx = entry["sex"]
         parent_id = entry["parent1_id"]
+        parent2_id = entry["parent2_id"]
         if parent_id and "*" in parent_id:
             parent_id = parent_id.replace("*", "")
         spouse_id = entry["spouse_id"]
@@ -132,7 +133,11 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
 
         # connect parent's descendants hub with anchor (if exists)
         if parent_id:
-            edges.append((f"hub1-{parent_id}", f"anchor-{person_id}"))
+            # always connect if hub 1 if no second parent is given
+            if not parent2_id:
+                edges.append((f"hub1-{parent_id}", f"anchor-{person_id}"))
+            else:
+                edges.append((f"hub2-{parent_id}", f"anchor-{person_id}"))
 
     return ig.Graph.TupleList(edges, directed=True, vertex_name_attr="name")
 
@@ -161,7 +166,7 @@ g = create_graph(df, exclude=spouse_ids)
 
 # Create SVG with x/y coordinate swap for left-to-right layout
 svg_width = 1500
-svg_height = 8400
+svg_height = 9000
 box_width = 168
 box_height = 58
 box_gap = 8
