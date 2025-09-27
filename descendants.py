@@ -79,24 +79,54 @@ def get_spouses(person_id, person_sx, spouse_id) -> list:
 
     spouses = [] if not spouse_id else spouse_id.split(":")
 
-    # order spouse nodes (male first in case of two spouses)
-    if len(spouses) == 0:
-        nodes = [person_id]
-        hubs = [(person_id, f"hub1-{person_id}")]
-    elif len(spouses) == 1:
-        nodes = [*spouses, person_id] if person_sx == "f" else [person_id, *spouses]
-        hubs = [(nodes[0], f"hub{i}-{person_id}") for i in range(len(nodes))]
-    else:
-        nodes = [spouses[0], person_id, spouses[1]]
-        hubs = [(person_id, f"hub{i}-{person_id}") for i in range(len(nodes))]
+    spid = None
+    if len(spouses) != 0 and spouses[0] != "-":
+        # check spouse of first spouse
+        spid = df.loc[spouses[0]].spouse_id
 
-    return (nodes, hubs)
+    # contraint: spouse of spouse must be before current spouse
+    if spid:
+        if len(spouses) == 1:
+            node_group = [spid, spouses[0], person_id]
+            hub_group = [(spouses[0], spid), (person_id, spouses[0]), None, None]
+        else:
+            node_group = [spid, spouses[0], person_id, spouses[1]]
+            hub_group = [
+                (spouses[0], spid),
+                (person_id, spouses[0]),
+                (person_id, spouses[1]),
+                None,
+            ]
+    else:
+        if len(spouses) == 0:
+            node_group = [person_id]
+            hub_group = [(person_id, None)]
+        elif len(spouses) == 1:
+            if person_sx == "f":
+                node_group = [*spouses, person_id]
+                hub_group = [(person_id, None), (person_id, spouses[0])]
+            else:
+                node_group = [person_id, *spouses]
+                hub_group = [(person_id, spouses[0]), (person_id, None)]
+        else:
+            node_group = [spouses[0], person_id, spouses[1]]
+            hub_group = [(person_id, sp) for sp in spouses]
+
+    hubs = [
+        (person_id, f"hub-{x[0]}:{x[1]}" if x else f"hub-0{i}")
+        for i, x in enumerate(hub_group)
+    ]
+
+    return (node_group, hubs)
 
 
 def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
+    """ """
 
+    hub_nodes = defaultdict(list)
     edges = []
 
+    # first pass: create nodes with hubs
     for index, entry in df.iterrows():
 
         person_id = index
@@ -126,18 +156,47 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
             if sp != "-":
                 edges.append((f"anchor-{person_id}", sp))
 
-        # create descendants hub for children (if exist)
+        # add hub nodes for children to connect
         if child_cnt:
-            for hub in hubs:
-                edges.append(hub)
+            for node, hub in hubs:
+                prefix = hub.split(":")[0] + ":"
+                if sp != "-":
+                    hub_nodes[prefix].append(hub)
+                    edges.append((node, hub))
 
-        # connect parent's descendants hub with anchor (if exists)
+    # second pass: connect nodes to parent hubs
+    for index, entry in df.iterrows():
+
+        person_id = index
+        parent_id = entry["parent1_id"]
+        parent2_id = entry["parent2_id"]
+        if parent_id and "*" in parent_id:
+            parent_id = parent_id.replace("*", "")
+
+        # ignore spouse nodes - handled separately
+        if person_id in exclude:
+            continue
+
+        # find right parent hub node
         if parent_id:
-            # always connect if hub 1 if no second parent is given
-            if not parent2_id:
-                edges.append((f"hub1-{parent_id}", f"anchor-{person_id}"))
-            else:
-                edges.append((f"hub2-{parent_id}", f"anchor-{person_id}"))
+            hubs = hub_nodes.get(f"hub-{parent_id}:", [])
+            match len(hubs):
+                case 0:
+                    print(
+                        f"no hub >>> {person_id}--{parent_id} -> {hubs} ({parent2_id})"
+                    )
+                case 1:
+                    edges.append((hubs[0], f"anchor-{person_id}"))
+                case 2:
+                    hubs2 = [h for h in hubs if h == f"hub-{parent_id}:{parent2_id}"]
+                    if len(hubs2) == 1:
+                        edges.append((hubs2[0], f"anchor-{person_id}"))
+                    else:
+                        print(
+                            f"no hub >>> {person_id}--{parent_id} -> {hubs} ({parent2_id})",
+                        )
+                case _:
+                    print(f"does not support {len(hubs)} hubs")
 
     return ig.Graph.TupleList(edges, directed=True, vertex_name_attr="name")
 
@@ -166,7 +225,7 @@ g = create_graph(df, exclude=spouse_ids)
 
 # Create SVG with x/y coordinate swap for left-to-right layout
 svg_width = 1500
-svg_height = 9000
+svg_height = 10000
 box_width = 168
 box_height = 58
 box_gap = 8
@@ -315,28 +374,28 @@ for idx, (x, y) in enumerate(coords):
     )
     # add link
     if len(name) > 4:
-      link = dwg.a(
-          f"https://meine-ahnen.eu/-/MA.dll?T=gedsql:db:indichart&home_id=0&indi={name}",
-          target="_blank",
-      )
-      link.add(box)
-      dwg.add(link)
+        link = dwg.a(
+            f"https://meine-ahnen.eu/-/MA.dll?T=gedsql:db:indichart&home_id=0&indi={name}",
+            target="_blank",
+        )
+        link.add(box)
+        dwg.add(link)
 
-      # add person id left side of box
-      id_text = dwg.text(
-          person.name,
-          insert=(x - box_width / 2 + 6, y),
-          text_anchor="middle",
-          dominant_baseline="middle",
-          font_size="8px",
-          font_family=text_font,
-          fill="white",
-          # font_weight="bold",
-      )
-      id_text.rotate(-90, center=(x - box_width / 2 + 6, y))
-      dwg.add(id_text)
+        # add person id left side of box
+        id_text = dwg.text(
+            person.name,
+            insert=(x - box_width / 2 + 6, y),
+            text_anchor="middle",
+            dominant_baseline="middle",
+            font_size="8px",
+            font_family=text_font,
+            fill="white",
+            # font_weight="bold",
+        )
+        id_text.rotate(-90, center=(x - box_width / 2 + 6, y))
+        dwg.add(id_text)
     else:
-      dwg.add(box)
+        dwg.add(box)
 
     extra_space = 4 if person.occupation else 0
 
@@ -424,13 +483,23 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
     spouses = person.spouse_id.split(":")
     for i, spouse_id in enumerate(spouses):
         idx_coords = coords[name_to_idx[idx]]
+
+        if spouse_id != "-" and not spouse_id in name_to_idx:
+            print("WARN spouse not found:", spouse_id)
+            continue
+
         sp_coords = coords[name_to_idx[spouse_id]] if spouse_id != "-" else idx_coords
 
+        # always apply a little offset in y direction
+        offset = 1.5 if idx_coords[1] > sp_coords[1] else -1.5
+        idx_coords = (idx_coords[0], idx_coords[1] - offset)
+        sp_coords = (sp_coords[0], sp_coords[1] + offset)
+
         # Apply offsets only if there are multiple spouses
-        if len(spouses) > 1:
-            offset = -2 if i == 0 else 2
-            idx_coords = (idx_coords[0], idx_coords[1] + offset)
-            sp_coords = (sp_coords[0], sp_coords[1] + offset)
+        # if len(spouses) > 1:
+        #     offset = -2 if i == 0 else 2
+        #     idx_coords = (idx_coords[0], idx_coords[1] + offset)
+        #     sp_coords = (sp_coords[0], sp_coords[1] + offset)
 
         (x1, y1), (x2, y2) = idx_coords, sp_coords
         x = x1 + box_width / 2 + 4
@@ -456,10 +525,14 @@ for idx, person in df[mask].iterrows():
 
     # get index of marriage
     midx = 0
-    if '+' in parent_id:
-      x = [mc for mc in marriage_coords if mc.startswith(parent_id.split('+')[0])]
-      midx = [i for i, mc in enumerate(x) if mc == parent_id][0]
-      # print(parent_id, x, midx)
+    if "+" in parent_id:
+        x = [mc for mc in marriage_coords if mc.startswith(parent_id.split("+")[0])]
+        midx = [i for i, mc in enumerate(x) if mc == parent_id]
+        if len(midx) == 0:
+            print("problem")
+        else:
+            midx = midx[0]
+        # print(parent_id, x, midx)
 
     # must have both parents
     if parent_id not in marriage_coords:
