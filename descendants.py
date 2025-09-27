@@ -491,15 +491,14 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
         sp_coords = coords[name_to_idx[spouse_id]] if spouse_id != "-" else idx_coords
 
         # always apply a little offset in y direction
-        offset = 1.5 if idx_coords[1] > sp_coords[1] else -1.5
-        idx_coords = (idx_coords[0], idx_coords[1] - offset)
-        sp_coords = (sp_coords[0], sp_coords[1] + offset)
-
-        # Apply offsets only if there are multiple spouses
-        # if len(spouses) > 1:
-        #     offset = -2 if i == 0 else 2
-        #     idx_coords = (idx_coords[0], idx_coords[1] + offset)
-        #     sp_coords = (sp_coords[0], sp_coords[1] + offset)
+        if spouse_id == "-":
+            # assuming "unknown father" to be first
+            idx_coords = (idx_coords[0], idx_coords[1] - 2)
+            sp_coords = (sp_coords[0], sp_coords[1] - 2)
+        else:
+            offset = 1.5 if idx_coords[1] > sp_coords[1] else -1.5
+            idx_coords = (idx_coords[0], idx_coords[1] - offset)
+            sp_coords = (sp_coords[0], sp_coords[1] + offset)
 
         (x1, y1), (x2, y2) = idx_coords, sp_coords
         x = x1 + box_width / 2 + 4
@@ -519,20 +518,15 @@ for idx, person in df[mask].iterrows():
         parent_id = parent_id.replace("*", "")
         dashed = "5 5"
 
+    # get info about parent (and spouse)
+    p_spouses = df.loc[parent_id].spouse_id.split(":")
+    if p_spouses[0] != "-":
+        spit = df.loc[p_spouses[0]].spouse_id
+    indent = spit != None or len(p_spouses) > 1 and p_spouses[1] == person.parent2_id
+
     # add second parent
     if person.parent2_id:
         parent_id += f"+{person.parent2_id}"
-
-    # get index of marriage
-    midx = 0
-    if "+" in parent_id:
-        x = [mc for mc in marriage_coords if mc.startswith(parent_id.split("+")[0])]
-        midx = [i for i, mc in enumerate(x) if mc == parent_id]
-        if len(midx) == 0:
-            print("problem")
-        else:
-            midx = midx[0]
-        # print(parent_id, x, midx)
 
     # must have both parents
     if parent_id not in marriage_coords:
@@ -542,7 +536,7 @@ for idx, person in df[mask].iterrows():
     (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
     cx = cx - box_width / 2 - 4
     x_mid = cx - 24
-    x_mid += midx * 8
+    x_mid += indent * 8
     d = f"M {px+24},{py} L {x_mid},{py} L {x_mid},{cy} L {cx},{cy}"
     dwg.add(
         dwg.path(
