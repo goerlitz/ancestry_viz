@@ -240,9 +240,119 @@ text_font = "Georgia, 'Times New Roman', Times, serif"
 font_name = text_font.split(",")[0]
 font_path = f"/System/Library/Fonts/Supplemental/{font_name} Bold.ttf"
 
-coords = create_layout(g, [f"anchor-{id}" for id in root_nodes])
+roots = [f"anchor-{id}" for id in root_nodes]
+coords = create_layout(g, roots)
 coords = to_canvas(coords)
 names = g.vs["name"]
+
+# ---
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
+
+
+def draw_debug_tree_svg(
+    g: ig.Graph,
+    roots,
+    outfile: str = "tree.svg",
+    box_w: int = 100,
+    box_h: int = 20,
+    hgap: int = 40,
+    vgap: int = 10,
+):
+    """
+    Draw a tree/forest laid out with Reingold–Tilford, with EXACT 100x30 boxes
+    (configurable via box_w/box_h) and spacing that guarantees no overlap.
+    Saves an SVG.
+
+    Parameters
+    ----------
+    g : ig.Graph
+        Directed graph.
+    roots : int | list[int] | list[str]
+        Root or roots (indices or names) for layout.
+    outfile : str
+        Output SVG filename.
+    box_w, box_h : int
+        box width and height in pixels.
+    hgap, vgap : int
+        Horizontal/vertical gaps between neighboring boxes (in pixels).
+    """
+    # 1) Get a tidy tree layout from igraph (relative coords)
+    layout = g.layout_reingold_tilford(root=roots, mode="out")
+
+    # 2) Normalize & scale layout to pixel centers with non-overlap spacing
+    xs = [pt[0] for pt in layout]
+    ys = [pt[1] for pt in layout]
+    min_x, min_y = min(xs), min(ys)
+
+    # Scale so each unit step in layout → box size + gap in pixels
+    scale_w = box_w + hgap
+    scale_h = box_h + vgap
+
+    cy = [(x - min_x) * scale_h for x in xs]  # centers (top→bottom orientation for now)
+    cx = [(y - min_y) * scale_w for y in ys]
+
+    # 3) Prepare labels (prefer vertex 'name', fallback to index)
+    labels = [
+        (
+            str(v["name"])
+            if "name" in g.vs.attributes() and v["name"] is not None
+            else str(v.index)
+        )
+        for v in g.vs
+    ]
+
+    # 4) Compute figure bounds with margins
+    m = 10  # margin
+    min_cx, max_cx = min(cx), max(cx)
+    min_cy, max_cy = min(cy), max(cy)
+    width_px = int((max_cx - min_cx) + box_w + 2 * m)
+    height_px = int((max_cy - min_cy) + box_h + 2 * m)
+
+    # Matplotlib figures are sized in inches; assume 100 dpi for easy px math
+    dpi = 100
+    fig_w_in = max(4, width_px / dpi)
+    fig_h_in = max(3, height_px / dpi)
+
+    fig, ax = plt.subplots(figsize=(fig_w_in, fig_h_in), dpi=dpi)
+
+    # 5) Draw edges (straight lines connecting box edges)
+    for e in g.es:
+        u, v = e.tuple
+        x1, y1 = cx[u], cy[u]
+        x2, y2 = cx[v], cy[v]
+
+        # left_to_right:
+        start = (x1 + box_w / 2, y1)
+        end = (x2 - box_w / 2, y2)
+
+        ax.plot([start[0], end[0]], [start[1], end[1]], linewidth=1.2, c="black")
+
+    # 6) Draw boxes and labels
+    for i in range(g.vcount()):
+        x, y = cx[i], cy[i]
+        # Rectangle expects lower-left corner; we have centers
+        llx = x - box_w / 2
+        lly = y - box_h / 2
+        rect = Rectangle((llx, lly), box_w, box_h, fill=False, linewidth=1.2)
+        ax.add_patch(rect)
+        ax.text(x, y, labels[i], ha="center", va="center")
+
+    # 7) Finalize canvas
+    ax.set_xlim(min_cx - box_w / 2 - m, max_cx + box_w / 2 + m)
+    ax.set_ylim(min_cy - box_h / 2 - m, max_cy + box_h / 2 + m)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    plt.tight_layout(pad=0)
+
+    # 8) Save SVG
+    fig.savefig(outfile, format="svg", bbox_inches="tight")
+    plt.close(fig)
+    return outfile
+
+
+draw_debug_tree_svg(g, roots=roots, outfile="debug.svg")
+# ---
 
 # post-process coordinates
 levels = defaultdict(list)
