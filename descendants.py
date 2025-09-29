@@ -74,6 +74,18 @@ def children_grouped_by_union(df_kids, focal_id):
     #     print("  ", row.parent2_id, "→", [df.loc[id]["name"] for id in row.children])
 
 
+YEAR_RE = re.compile(r"^(\d{4})")  # take the first 4 digits at the start
+
+
+def to_year(val):
+    """Return int year or None from 'YYYY' or 'YYYY-MM[-DD]' (or NaN/None)."""
+    if val is None or (isinstance(val, float) and math.isnan(val)):
+        return None
+    s = str(val).strip()
+    m = YEAR_RE.match(s)
+    return int(m.group(1)) if m else None
+
+
 def get_spouses(person_id, person_sx, spouse_id) -> list:
     """Create ordered list of spouse nodes and children hubs."""
 
@@ -81,21 +93,34 @@ def get_spouses(person_id, person_sx, spouse_id) -> list:
 
     spid = None
     if len(spouses) != 0 and spouses[0] != "-":
-        # check spouse of first spouse
+        # check spouse of first spouse aka previous marriage
         spid = df.loc[spouses[0]].spouse_id
 
     # contraint: spouse of spouse must be before current spouse
     if spid:
         if len(spouses) == 1:
             node_group = [spid, spouses[0], person_id]
-            hub_group = [(spouses[0], spid), (person_id, spouses[0]), None, None]
+            hub_group = [
+                (spouses[0], spid),
+                (person_id, spouses[0]),
+                (person_id, None),
+                (person_id, None),
+            ]
+            # TODO: attach both nodes to spouse for better tree alignment
+
+            # check marriage dates and reverse if needed
+            pm = df.loc[person_id].marriage_date
+            sm = df.loc[spouses[0]].marriage_date
+            if to_year(pm) < to_year(sm):
+                node_group = node_group[::-1]
+                hub_group = hub_group[::-1]
         else:
             node_group = [spid, spouses[0], person_id, spouses[1]]
             hub_group = [
                 (spouses[0], spid),
                 (person_id, spouses[0]),
                 (person_id, spouses[1]),
-                None,
+                (person_id, None),
             ]
     else:
         if len(spouses) == 0:
@@ -103,18 +128,18 @@ def get_spouses(person_id, person_sx, spouse_id) -> list:
             hub_group = [(person_id, None)]
         elif len(spouses) == 1:
             if person_sx == "f":
-                node_group = [*spouses, person_id]
-                hub_group = [(person_id, None), (person_id, spouses[0])]
-            else:
-                node_group = [person_id, *spouses]
+                node_group = [spouses[0], person_id]
                 hub_group = [(person_id, spouses[0]), (person_id, None)]
+            else:
+                node_group = [person_id, spouses[0]]
+                hub_group = [(person_id, None), (person_id, spouses[0])]
         else:
             node_group = [spouses[0], person_id, spouses[1]]
             hub_group = [(person_id, sp) for sp in spouses]
 
     hubs = [
-        (person_id, f"hub-{x[0]}:{x[1]}" if x else f"hub-0{i}")
-        for i, x in enumerate(hub_group)
+        (person_id, f"hub-{p1}:{p2}" if p2 else f"hub-{p1}_{i}")
+        for i, (p1, p2) in enumerate(hub_group)
     ]
 
     return (node_group, hubs)
@@ -152,17 +177,20 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
             continue
 
         (spouse_nodes, hubs) = get_spouses(person_id, person_sx, spouse_id)
+
+        # put all spouses under the same person anchor group (need a tree)
         for sp in spouse_nodes:
             if sp != "-":
                 edges.append((f"anchor-{person_id}", sp))
 
-        # add hub nodes for children to connect
+        # add hub nodes to index (for children to find)
         if child_cnt:
             for node, hub in hubs:
-                prefix = hub.split(":")[0] + ":"
-                if sp != "-":
-                    hub_nodes[prefix].append(hub)
-                    edges.append((node, hub))
+                edges.append((node, hub))
+
+                parts = hub.split(":")
+                if len(parts) == 2:
+                    hub_nodes[parts[0] + ":"].append(hub)
 
     # second pass: connect nodes to parent hubs
     for index, entry in df.iterrows():
@@ -467,6 +495,7 @@ for idx, (x, y) in enumerate(coords):
     if (df.index == name).sum() > 1:
         print("WARN duplicate key:", name)
 
+    # print("***", name)
     person = df.loc[name]
 
     is_male = person["sex"] == "m"
