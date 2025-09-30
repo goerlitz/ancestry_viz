@@ -61,19 +61,6 @@ def draw_confession(dwg, x, y, is_kath=False):
     dwg.add(path)
 
 
-def children_grouped_by_union(df_kids, focal_id):
-    groups = (
-        df_kids.reset_index()
-        .groupby("parent2_id", dropna=False)
-        .id.agg(list)
-        .rename("children")
-        .reset_index()
-    )
-    # print(df.loc[focal_id]["name"])
-    # for row in groups.itertuples(index=False):
-    #     print("  ", row.parent2_id, "→", [df.loc[id]["name"] for id in row.children])
-
-
 YEAR_RE = re.compile(r"^(\d{4})")  # take the first 4 digits at the start
 
 
@@ -86,10 +73,8 @@ def to_year(val):
     return int(m.group(1)) if m else None
 
 
-def get_spouses(person_id, person_sx, spouse_id) -> list:
+def get_spouses(person_id, person_sx, spouses: list) -> list:
     """Create ordered list of spouse nodes and children hubs."""
-
-    spouses = [] if not spouse_id else spouse_id.split(":")
 
     spid = None
     if len(spouses) != 0 and spouses[0] != "-":
@@ -111,7 +96,7 @@ def get_spouses(person_id, person_sx, spouse_id) -> list:
             # check marriage dates and reverse if needed
             pm = df.loc[person_id].marriage_date
             sm = df.loc[spouses[0]].marriage_date
-            if to_year(pm) < to_year(sm):
+            if pm and sm and to_year(pm) < to_year(sm):
                 node_group = node_group[::-1]
                 hub_group = hub_group[::-1]
         else:
@@ -125,7 +110,7 @@ def get_spouses(person_id, person_sx, spouse_id) -> list:
     else:
         if len(spouses) == 0:
             node_group = [person_id]
-            hub_group = [(person_id, None)]
+            hub_group = [(person_id, "")]
         elif len(spouses) == 1:
             if person_sx == "f":
                 node_group = [spouses[0], person_id]
@@ -138,7 +123,7 @@ def get_spouses(person_id, person_sx, spouse_id) -> list:
             hub_group = [(person_id, sp) for sp in spouses]
 
     hubs = [
-        (person_id, f"hub-{p1}:{p2}" if p2 else f"hub-{p1}_{i}")
+        (person_id, f"hub-{p1}:{p2}" if p2 is not None else f"hub-{p1}_{i}")
         for i, (p1, p2) in enumerate(hub_group)
     ]
 
@@ -165,18 +150,23 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
         if parent_id and "*" in parent_id:
             parent_id = parent_id.replace("*", "")
         spouse_id = entry["spouse_id"]
-        child_match = df.parent1_id.str.replace("*", "") == person_id
-        child_cnt = sum(child_match)
+        spouses = [] if not spouse_id else spouse_id.split(":")
 
-        # group children unions
-        if not person_id in exclude and child_cnt != 0:
-            children_grouped_by_union(df[child_match], person_id)
+        # count all children of this person and attached spouses
+        child_match = (
+            df["parent1_id"]
+            .astype(str)
+            .str.replace("*", "", regex=False)
+            .isin([person_id, *spouses])
+        )
+        child_cnt = sum(child_match)
 
         # ignore spouse nodes - handled separately
         if person_id in exclude:
             continue
 
-        (spouse_nodes, hubs) = get_spouses(person_id, person_sx, spouse_id)
+        # identify spouses and prepare hub nodes
+        (spouse_nodes, hubs) = get_spouses(person_id, person_sx, spouses)
 
         # put all spouses under the same person anchor group (need a tree)
         for sp in spouse_nodes:
@@ -211,7 +201,7 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
             match len(hubs):
                 case 0:
                     print(
-                        f"no hub >>> {person_id}--{parent_id} -> {hubs} ({parent2_id})"
+                        f"no hub >>> {person_id}->'{parent_id}:' >>> {hubs} ({parent2_id})"
                     )
                 case 1:
                     edges.append((hubs[0], f"anchor-{person_id}"))
@@ -221,7 +211,7 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
                         edges.append((hubs2[0], f"anchor-{person_id}"))
                     else:
                         print(
-                            f"no hub >>> {person_id}--{parent_id} -> {hubs} ({parent2_id})",
+                            f"no hub for parent 1+2 >>> {person_id}->{parent_id}:{parent2_id}: {hubs} ({parent2_id})",
                         )
                 case _:
                     print(f"does not support {len(hubs)} hubs")
@@ -362,7 +352,13 @@ def draw_debug_tree_svg(
         # Rectangle expects lower-left corner; we have centers
         llx = x - box_w / 2
         lly = y - box_h / 2
-        rect = Rectangle((llx, lly), box_w, box_h, fill=False, linewidth=1.2)
+        rect = Rectangle(
+            (llx, lly),
+            box_w,
+            box_h,
+            fill="grey" if "-" in labels[i] else False,
+            linewidth=1.2,
+        )
         ax.add_patch(rect)
         ax.text(x, y, labels[i], ha="center", va="center")
 
@@ -647,6 +643,21 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
         d = f"M {x},{y1} L {x+24},{y1} L {x+24},{y2} L {x},{y2}"
         dwg.add(dwg.path(d=d, stroke="lightgray", fill="none", stroke_width=1.2))
 
+# add single moms (has no spouse but child(ren) and is not itself a spouse)
+no_spouse = df["spouse_id"].isna()
+not_a_spouse = ~df.index.isin(spouse_ids)
+has_children = df.index.isin(set(df.parent1_id.dropna()))
+
+marriage_info_size = 24
+
+for single_mom in df[no_spouse & has_children & not_a_spouse].index:
+    sm_coords = coords[name_to_idx[single_mom]]
+    marriage_coords[single_mom] = (
+        sm_coords[0] + box_width / 2 + 4 - marriage_info_size,
+        sm_coords[1],
+    )
+
+
 # draw parent connections
 mask = df["parent1_id"].notna() & ~df.index.isin(spouse_ids)
 for idx, person in df[mask].iterrows():
@@ -657,11 +668,17 @@ for idx, person in df[mask].iterrows():
         parent_id = parent_id.replace("*", "")
         dashed = "5 5"
 
+    indent = 0
+
     # get info about parent (and spouse)
-    p_spouses = df.loc[parent_id].spouse_id.split(":")
-    if p_spouses[0] != "-":
-        spit = df.loc[p_spouses[0]].spouse_id
-    indent = spit != None or len(p_spouses) > 1 and p_spouses[1] == person.parent2_id
+    p_spouse_id = df.loc[parent_id].spouse_id
+    if p_spouse_id:
+        p_spouses = p_spouse_id.split(":")
+        if p_spouses[0] != "-":
+            spit = df.loc[p_spouses[0]].spouse_id
+        indent = (
+            spit != None or len(p_spouses) > 1 and p_spouses[1] == person.parent2_id
+        )
 
     # add second parent
     if person.parent2_id:
@@ -674,9 +691,9 @@ for idx, person in df[mask].iterrows():
 
     (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
     cx = cx - box_width / 2 - 4
-    x_mid = cx - 24
+    x_mid = cx - marriage_info_size
     x_mid += indent * 8
-    d = f"M {px+24},{py} L {x_mid},{py} L {x_mid},{cy} L {cx},{cy}"
+    d = f"M {px+marriage_info_size},{py} L {x_mid},{py} L {x_mid},{cy} L {cx},{cy}"
     dwg.add(
         dwg.path(
             d=d,
@@ -691,7 +708,7 @@ for idx, person in df[mask].iterrows():
 for idx, person in df[df["marriage_date"].notna()].iterrows():
 
     marr_dates = person.marriage_date.split(":")
-    spouses = person.spouse_id.split(":")
+    spouses = person.spouse_id.split(":") if person.spouse_id else []
     places = person.place_of_marriage.split(":")
 
     for dt, sp_id, place in zip(marr_dates, spouses, places):
