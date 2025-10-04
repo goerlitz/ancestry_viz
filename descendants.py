@@ -77,9 +77,9 @@ def get_spouses(person_id, person_sx, spouses: list) -> list:
     """Create ordered list of spouse nodes and children hubs."""
 
     spid = None
-    if len(spouses) != 0 and spouses[0] != "-":
+    if len(spouses) != 0:
         # check spouse of first spouse aka previous marriage
-        spid = df.loc[spouses[0]].spouse_id
+        spid = df.loc[spouses[1 if spouses[0] == "-" else 0]].spouse_id
 
     # contraint: spouse of spouse must be before current spouse
     if spid:
@@ -242,9 +242,9 @@ g = create_graph(df, exclude=spouse_ids)
 
 
 # Create SVG with x/y coordinate swap for left-to-right layout
-svg_width = 1500
-svg_height = 10000
-box_width = 168
+svg_width = 1650
+svg_height = 11000
+box_width = 184
 box_height = 58
 box_gap = 8
 sib_gap = 8
@@ -627,9 +627,10 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
 
         # always apply a little offset in y direction
         if spouse_id == "-":
+            offs = 2 if i % 2 == 0 else -2
             # assuming "unknown father" to be first
-            idx_coords = (idx_coords[0], idx_coords[1] - 2)
-            sp_coords = (sp_coords[0], sp_coords[1] - 2)
+            idx_coords = (idx_coords[0], idx_coords[1] - offs)
+            sp_coords = (sp_coords[0], sp_coords[1] - offs)
         else:
             offset = 1.5 if idx_coords[1] > sp_coords[1] else -1.5
             idx_coords = (idx_coords[0], idx_coords[1] - offset)
@@ -659,8 +660,8 @@ for single_mom in df[no_spouse & has_children & not_a_spouse].index:
 
 
 # draw parent connections
-mask = df["parent1_id"].notna() & ~df.index.isin(spouse_ids)
-for idx, person in df[mask].iterrows():
+has_parent = df["parent1_id"].notna()
+for idx, person in df[has_parent & not_a_spouse].iterrows():
 
     dashed = "none"
     parent_id = person.parent1_id
@@ -669,6 +670,7 @@ for idx, person in df[mask].iterrows():
         dashed = "5 5"
 
     indent = 0
+    indent_size = 8
 
     # get info about parent (and spouse)
     p_spouse_id = df.loc[parent_id].spouse_id
@@ -676,9 +678,18 @@ for idx, person in df[mask].iterrows():
         p_spouses = p_spouse_id.split(":")
         if p_spouses[0] != "-":
             spit = df.loc[p_spouses[0]].spouse_id
-        indent = (
-            spit != None or len(p_spouses) > 1 and p_spouses[1] == person.parent2_id
-        )
+
+        # indentation rules:
+        # if parent has a spouse who has a previous spouse - then we need indent to avoid overlapping lines
+        # if parent has 2 spouses, the second one should have indent - unless the first spouse has a previous spouse
+        # then the first one needs indent and the second one not
+        if len(p_spouses) == 1 and spit != None:
+            indent = indent_size
+        if len(p_spouses) == 2:
+            if spit != None and p_spouses[0] == person.parent2_id:
+                indent = indent_size
+            if spit is None and p_spouses[1] == person.parent2_id:
+                indent = indent_size
 
     # add second parent
     if person.parent2_id:
@@ -692,7 +703,7 @@ for idx, person in df[mask].iterrows():
     (cx, cy), (px, py) = coords[name_to_idx[idx]], marriage_coords[parent_id]
     cx = cx - box_width / 2 - 4
     x_mid = cx - marriage_info_size
-    x_mid += indent * 8
+    x_mid += indent
     d = f"M {px+marriage_info_size},{py} L {x_mid},{py} L {x_mid},{cy} L {cx},{cy}"
     dwg.add(
         dwg.path(
