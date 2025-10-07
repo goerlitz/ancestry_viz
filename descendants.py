@@ -220,12 +220,36 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
 
 
 def create_layout(g: ig.Graph, root: list):
-    layout = g.layout_reingold_tilford(root=root, mode="out")
+    # coords = g.layout_reingold_tilford(root=root, mode="out").coords
 
-    # swap x and y axis and normalize to positive values
-    coords = layout.coords
-    offset = -min([x for x, y in coords])
-    return [(y, x + offset) for x, y in coords]
+    layouts = []
+    x_cursor = 0.0
+    coords = [None] * g.vcount()
+
+    for sub in g.decompose(mode="weak"):
+        # pick root(s) automatically
+        roots_in_sub = [v.index for v in sub.vs if sub.degree(v, mode="in") == 0]
+        lay = sub.layout_reingold_tilford(root=roots_in_sub, mode="out")
+
+        # compute bounding box
+        xs, ys = zip(*lay)
+        xmin, xmax = min(xs), max(xs)
+        width = xmax - xmin
+        # print(roots_in_sub, xmin, xmax, width)
+
+        # shift
+        shifted = [(x - xmin + x_cursor, y) for x, y in lay]
+
+        # map back to global coordinates
+        for sub_idx, global_idx in enumerate(sub.vs["name"]):
+            coords[g.vs.find(name=global_idx).index] = shifted[sub_idx]
+
+        x_cursor += width + 1.2  # spacing
+
+    # normalize with 1 as minimum and swap coordinates
+    xs, ys = zip(*coords)
+    xmin, ymin = min(xs), min(ys)
+    return [(y - ymin + 1, x - xmin + 1) for x, y in coords]
 
 
 def to_canvas(coords):
@@ -240,12 +264,12 @@ root_nodes = [p for p in df[df["parent1_id"].isnull()].index if not p in spouse_
 
 g = create_graph(df, exclude=spouse_ids)
 
+roots = [f"anchor-{id}" for id in root_nodes]
+coords = create_layout(g, roots)
 
 # Create SVG with x/y coordinate swap for left-to-right layout
-svg_width = 1650
-svg_height = 11000
 box_width = 184
-box_height = 58
+box_height = 60
 box_gap = 8
 sib_gap = 8
 x_unit = box_width * 0.5
@@ -258,10 +282,15 @@ text_font = "Georgia, 'Times New Roman', Times, serif"
 font_name = text_font.split(",")[0]
 font_path = f"/System/Library/Fonts/Supplemental/{font_name} Bold.ttf"
 
-roots = [f"anchor-{id}" for id in root_nodes]
-coords = create_layout(g, roots)
+# turn into canvas coordinates
 coords = to_canvas(coords)
 names = g.vs["name"]
+
+# compute canvas size
+xx, yy = zip(*coords)
+svg_width = max(xx) + box_width * 0.7
+svg_height = max(yy) + box_height * 0.7
+
 
 # ---
 import matplotlib.pyplot as plt
@@ -498,7 +527,7 @@ for idx, (x, y) in enumerate(coords):
     is_spouse = name in spouse_ids
     fill, stroke = get_colors(is_male, is_spouse)
 
-    # Draw box
+    # Draw box (around center coordinate given by x, y)
     box = dwg.rect(
         insert=(x - box_width / 2, y - box_height / 2),
         size=(box_width, box_height),
