@@ -100,13 +100,22 @@ def get_spouses(person_id, person_sx, spouses: list) -> list:
                 node_group = node_group[::-1]
                 hub_group = hub_group[::-1]
         else:
-            node_group = [spid, spouses[0], person_id, spouses[1]]
-            hub_group = [
-                (spouses[0], spid),
-                (person_id, spouses[0]),
-                (person_id, spouses[1]),
-                (person_id, None),
-            ]
+            if spouses[0] == "-":
+                node_group = [spouses[0], person_id, spouses[1], spid]
+                hub_group = [
+                    (person_id, spouses[0]),
+                    (person_id, spouses[1]),
+                    (spouses[1], spid),
+                    (person_id, None),
+                ]
+            else:
+                node_group = [spid, spouses[0], person_id, spouses[1]]
+                hub_group = [
+                    (spouses[0], spid),
+                    (person_id, spouses[0]),
+                    (person_id, spouses[1]),
+                    (person_id, None),
+                ]
     else:
         if len(spouses) == 0:
             node_group = [person_id]
@@ -749,7 +758,7 @@ for idx, person in df[df["marriage_date"].notna()].iterrows():
 
     marr_dates = person.marriage_date.split(":")
     spouses = person.spouse_id.split(":") if person.spouse_id else []
-    places = person.place_of_marriage.split(":")
+    places = person.place_of_marriage.split(":") if person.place_of_marriage else []
 
     for dt, sp_id, place in zip(marr_dates, spouses, places):
         if sp_id == "-":
