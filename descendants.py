@@ -96,7 +96,7 @@ def get_spouses(person_id, person_sx, spouses: list) -> list:
             # check marriage dates and reverse if needed
             pm = df.loc[person_id].marriage_date
             sm = df.loc[spouses[0]].marriage_date
-            if pm and sm and to_year(pm) < to_year(sm):
+            if pm and sm and not "#" in pm + sm and to_year(pm) < to_year(sm):
                 node_group = node_group[::-1]
                 hub_group = hub_group[::-1]
         else:
@@ -513,9 +513,9 @@ def get_colors(is_male: bool, is_spouse: bool):
 
     # Muted variants for spouses
     if is_male:
-        mut_fill, mut_stroke = "#E3F2FD", "white"  # softer blues
+        mut_fill, mut_stroke = "#f0f8fd", "#c2d8f2"  # softer blues
     else:
-        mut_fill, mut_stroke = "#FCE4EC", "white"  # softer pinks
+        mut_fill, mut_stroke = "#fcf2f5", "#ffcceb"  # softer pinks
 
     return mut_fill, mut_stroke
 
@@ -529,12 +529,17 @@ for idx, (x, y) in enumerate(coords):
     if (df.index == name).sum() > 1:
         print("WARN duplicate key:", name)
 
-    # print("***", name)
-    person = df.loc[name]
+    person = df.loc[name].copy()
 
     is_male = person["sex"] == "m"
     is_spouse = name in spouse_ids
     fill, stroke = get_colors(is_male, is_spouse)
+
+    # add dashed border for unknown people or with missing info
+    stroke_dasharray = "none"
+    if "°" in person["name"] or "?" in person["name"]:
+        stroke_dasharray = "4 4"
+        person["name"] = person["name"].replace("°", "")
 
     # Draw box (around center coordinate given by x, y)
     box = dwg.rect(
@@ -543,6 +548,7 @@ for idx, (x, y) in enumerate(coords):
         fill=fill,
         stroke=stroke,
         stroke_width=1.5,
+        stroke_dasharray=stroke_dasharray,
         rx=4,  # rounded corners
     )
     # add link
