@@ -228,14 +228,18 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
     return ig.Graph.TupleList(edges, directed=True, vertex_name_attr="name")
 
 
-def create_layout(g: ig.Graph, root: list):
-    # coords = g.layout_reingold_tilford(root=root, mode="out").coords
-
+def create_layout(g: ig.Graph, roots: list = None):
     layouts = []
     x_cursor = 0.0
-    coords = [None] * g.vcount()
+    coords = [(None, None)] * g.vcount()
 
-    for sub in g.decompose(mode="weak"):
+    # use given roots to extract subgraphs or split into unconnected components
+    if roots:
+        subgraphs = [g.subgraph(g.subcomponent(root, mode="OUT")) for root in roots]
+    else:
+        subgraphs = g.decompose(mode="weak")
+
+    for sub in subgraphs:
         # pick root(s) automatically
         roots_in_sub = [v.index for v in sub.vs if sub.degree(v, mode="in") == 0]
         lay = sub.layout_reingold_tilford(root=roots_in_sub, mode="out")
@@ -244,7 +248,6 @@ def create_layout(g: ig.Graph, root: list):
         xs, ys = zip(*lay)
         xmin, xmax = min(xs), max(xs)
         width = xmax - xmin
-        # print(roots_in_sub, xmin, xmax, width)
 
         # shift
         shifted = [(x - xmin + x_cursor, y) for x, y in lay]
@@ -255,25 +258,33 @@ def create_layout(g: ig.Graph, root: list):
 
         x_cursor += width + 1.2  # spacing
 
-    # normalize with 1 as minimum and swap coordinates
-    xs, ys = zip(*coords)
-    xmin, ymin = min(xs), min(ys)
-    return [(y - ymin + 1, x - xmin + 1) for x, y in coords]
+    return coords
 
 
 def to_canvas(coords):
-    return [(x * x_unit + x_margin, y * y_unit + y_margin) for x, y in coords]
+    # get xmin and ymin of coords while ignoring (None, None) entries
+    xs, ys = zip(*[(x, y) for x, y in coords if x or y])
+    xmin, ymin = min(xs), min(ys)
+
+    def transform_and_scale(x, y):
+        if not (x or y):
+            return (0, 0)
+        # Swap coordinates, normalize to (1,1) as origin, then scale
+        return ((y - ymin + 1) * x_unit + x_margin, (x - xmin + 1) * y_unit + y_margin)
+
+    return [transform_and_scale(x, y) for x, y in coords]
 
 
-# spouse_ids = set(df["spouse_id"]) - {None}
 spouse_ids = df["spouse_id"].dropna().str.split(":").explode().pipe(set) - {None}
 
-root_nodes = [p for p in df[df["parent1_id"].isnull()].index if not p in spouse_ids]
-# root_nodes = ['531035']
 
 g = create_graph(df, exclude=spouse_ids)
 
-roots = [f"anchor-{id}" for id in root_nodes]
+root_nodes = None
+# root_nodes = [p for p in df[df["parent1_id"].isnull()].index if not p in spouse_ids]
+# root_nodes = ["252317"]
+roots = [f"anchor-{id}" for id in root_nodes] if root_nodes else None
+
 coords = create_layout(g, roots)
 
 # Create SVG with x/y coordinate swap for left-to-right layout
@@ -417,40 +428,40 @@ draw_debug_tree_svg(g, roots=roots, outfile="debug.svg")
 # ---
 
 # post-process coordinates
-levels = defaultdict(list)
-for idx, (x, y) in enumerate(coords):
-    levels[x].append(idx)
-selected_levels = sorted(levels.keys())[::3]
+# levels = defaultdict(list)
+# for idx, (x, y) in enumerate(coords):
+#     levels[x].append(idx)
+# selected_levels = sorted(levels.keys())[::3]
 
 
-def get_level_nodes(level):
-    # get index of nodes in this level
-    return [
-        idx
-        for idx, _ in sorted(
-            ((i, y) for i, (x, y) in enumerate(coords) if abs(x - level) < 1e-6),
-            key=lambda t: t[1],
-        )
-    ]
+# def get_level_nodes(level):
+#     # get index of nodes in this level
+#     return [
+#         idx
+#         for idx, _ in sorted(
+#             ((i, y) for i, (x, y) in enumerate(coords) if abs(x - level) < 1e-6),
+#             key=lambda t: t[1],
+#         )
+#     ]
 
 
-def apply_gaps(nodes, gaps):
-    for idx, gap in zip(nodes, gaps):
-        children = g.subcomponent(idx, mode="OUT")
-        for node in children:
-            x, y = coords[node]
-            coords[node] = (x, y + gap)
-        # parents = g.subcomponent(idx, mode="IN")
-        # for node in parents:
-        #     x, y = coords[node]
-        #     coords[node] = (x, y + gap / 2)
+# def apply_gaps(nodes, gaps):
+#     for idx, gap in zip(nodes, gaps):
+#         children = g.subcomponent(idx, mode="OUT")
+#         for node in children:
+#             x, y = coords[node]
+#             coords[node] = (x, y + gap)
+# parents = g.subcomponent(idx, mode="IN")
+# for node in parents:
+#     x, y = coords[node]
+#     coords[node] = (x, y + gap / 2)
 
 
 # add gap between sibling trees on all levels (except leaf nodes)
-for level in selected_levels[:-1]:
-    level_idxs = get_level_nodes(level)
-    gaps = [i * sib_gap for i in range(len(level_idxs))]
-    # apply_gaps(level_idxs, gaps)
+# for level in selected_levels[:-1]:
+#     level_idxs = get_level_nodes(level)
+#     gaps = [i * sib_gap for i in range(len(level_idxs))]
+# apply_gaps(level_idxs, gaps)
 
 
 def date2str(value: str) -> str:
@@ -530,6 +541,11 @@ def get_colors(is_male: bool, is_spouse: bool):
 
 # Draw nodes (skip helper nodes)
 for idx, (x, y) in enumerate(coords):
+
+    # skip unconnected nodes that have no layout coordinates
+    if not x:
+        continue
+
     name = names[idx]
     if "-" in name:
         continue
@@ -679,6 +695,10 @@ for idx, person in df[df.spouse_id.notna()].iterrows():
     for i, spouse_id in enumerate(spouses):
         idx_coords = coords[name_to_idx[idx]]
 
+        # skip unconnected nodes that have no layout coordinates
+        if not idx_coords[0]:
+            continue
+
         if spouse_id != "-" and not spouse_id in name_to_idx:
             print("WARN spouse not found:", spouse_id)
             continue
@@ -722,6 +742,10 @@ for single_mom in df[no_spouse & has_children & not_a_spouse].index:
 # draw parent connections
 has_parent = df["parent1_id"].notna()
 for idx, person in df[has_parent & not_a_spouse].iterrows():
+
+    # skip unconnected nodes that have no layout coordinates
+    if not coords[name_to_idx[idx]][0]:
+        continue
 
     dashed = "none"
     parent_id = person.parent1_id
@@ -777,6 +801,10 @@ for idx, person in df[has_parent & not_a_spouse].iterrows():
 
 # place marriage info
 for idx, person in df[df["marriage_date"].notna()].iterrows():
+
+    # skip unconnected nodes that have no layout coordinates
+    if not coords[name_to_idx[idx]][0]:
+        continue
 
     marr_dates = person.marriage_date.split(":")
     spouses = person.spouse_id.split(":") if person.spouse_id else []
