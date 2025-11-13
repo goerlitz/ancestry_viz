@@ -460,11 +460,19 @@ def date2str(value: str) -> str:
         return value
     if value.startswith("x"):
         value = value[1:]
+    if value.endswith("?"):
+        value = value[:-1]
+        unknown = True
+    else:
+        unknown = False
 
     try:
         date_obj = datetime.strptime(value, "%Y-%m-%d")
         # 'd. MMM y' = e.g., 15. Jan 1880 in German format
-        return format_date(date_obj, format="d. MMM y", locale="de")
+        date_f = format_date(date_obj, format="d. MMM y", locale="de")
+        if unknown:
+            date_f += "?"
+        return date_f
     except ValueError:
         return str(value)
 
@@ -618,13 +626,17 @@ for idx, (x, y) in enumerate(coords):
 
     if info_lines:
         for k, info in enumerate(info_lines):
+            if info.endswith("?"):
+                font_color = "purple"
+            else:
+                font_color = "#666666"
             info_text = dwg.text(
                 info,
                 insert=(x - 4, y - 18 + box_height / 2 + k * 12),
                 text_anchor="end",
                 font_size="10px",
                 font_family=text_font,
-                fill="#666666",
+                fill=font_color,
             )
             dwg.add(info_text)
 
@@ -637,13 +649,17 @@ for idx, (x, y) in enumerate(coords):
 
     if info_lines:
         for k, info in enumerate(info_lines):
+            if info.endswith("?"):
+                font_color = "purple"
+            else:
+                font_color = "#666666"
             info_text = dwg.text(
                 info,
                 insert=(x, y - 18 + box_height / 2 + k * 12),
                 text_anchor="start",
                 font_size="10px",
                 font_family=text_font,
-                fill="#666666",
+                fill=font_color,
             )
             dwg.add(info_text)
 
