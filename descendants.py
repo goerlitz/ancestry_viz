@@ -229,15 +229,21 @@ def create_graph(df: pd.DataFrame, exclude: list = []) -> ig.Graph:
 
 
 def create_layout(g: ig.Graph, roots: list = None):
+    """
+    Create a global layout by laying out every subgraph and pasting them next to each other.
+    Returns node coords that are aligned with global index.
+    """
     layouts = []
     x_cursor = 0.0
     coords = [(None, None)] * g.vcount()
 
-    # use given roots to extract subgraphs or split into unconnected components
-    if roots:
-        subgraphs = [g.subgraph(g.subcomponent(root, mode="OUT")) for root in roots]
-    else:
-        subgraphs = g.decompose(mode="weak")
+    # determine roots if not explicitly given
+    if not roots:
+        roots = [v.index for v in g.vs if g.degree(v.index, mode="IN") == 0]
+
+    # extract subgraphs for each root
+    subgraphs = [g.subgraph(g.subcomponent(root, mode="OUT")) for root in roots]
+
 
     for sub in subgraphs:
         # pick root(s) automatically
@@ -254,7 +260,11 @@ def create_layout(g: ig.Graph, roots: list = None):
 
         # map back to global coordinates
         for sub_idx, global_idx in enumerate(sub.vs["name"]):
-            coords[g.vs.find(name=global_idx).index] = shifted[sub_idx]
+            idx = g.vs.find(name=global_idx).index
+            # Todo: find a solution to have same node in two subgraphs (two coordinates)
+            if coords[idx][0]:
+                print(f"overwriting coordinate for {idx}:({coords[idx]})")
+            coords[idx] = shifted[sub_idx]
 
         x_cursor += width + 1.2  # spacing
 
@@ -276,6 +286,14 @@ def to_canvas(coords):
 
 
 spouse_ids = df["spouse_id"].dropna().str.split(":").explode().pipe(set) - {None}
+
+# find simple spouse loops (which means marriages across sub graphs)
+mask = df["spouse_id"].map(df["spouse_id"]).eq(df.index)
+circular_ids = df[mask].index
+
+# and exclude them from spouse id list
+if not mask.empty:
+    spouse_ids = [id for id in spouse_ids if id not in circular_ids]
 
 
 g = create_graph(df, exclude=spouse_ids)
@@ -693,6 +711,10 @@ marriage_coords = {}
 for idx, person in df[df.spouse_id.notna()].iterrows():
     spouses = person.spouse_id.split(":")
     for i, spouse_id in enumerate(spouses):
+        if idx not in name_to_idx:
+            print(f"{idx} is not in coord index (skipping spouse connection)")
+            continue
+
         idx_coords = coords[name_to_idx[idx]]
 
         # skip unconnected nodes that have no layout coordinates
@@ -801,6 +823,10 @@ for idx, person in df[has_parent & not_a_spouse].iterrows():
 
 # place marriage info
 for idx, person in df[df["marriage_date"].notna()].iterrows():
+
+    if idx not in name_to_idx:
+        print(f"{idx} is not in coord index (skipping marriage info)")
+        continue
 
     # skip unconnected nodes that have no layout coordinates
     if not coords[name_to_idx[idx]][0]:
